@@ -28,7 +28,9 @@ innodb_flush_log_at_trx_commit = 0
 # ----------------------------------------------
 # For CDC ingest
 # ----------------------------------------------
-server-id         = 223344
-log_bin           = mysql-bin
-expire_logs_days  = 1
-binlog_format     = row
+server-id           = 223344
+log_bin             = mysql-bin
+expire_logs_days    = 1
+binlog_format       = row
+mysqlx-port         = 33060
+mysqlx-bind-address = 127.0.0.1

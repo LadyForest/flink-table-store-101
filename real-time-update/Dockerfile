@@ -16,27 +16,23 @@
 # limitations under the License.
 ###############################################################################
 
-FROM mysql:latest
+FROM mysql:8.0
 WORKDIR /tpch/dbgen/
 COPY --from=iamjane/tpch-mysql:latest /tpch/dbgen/ /tpch/dbgen/
 COPY ./mysql/ /tpch/dbgen/
 
-ARG SF=1
-ARG TABLE_NAME=lineitem
-ARG FILE_NAME=lineitem.tbl
-ARG STAGE=init
-ARG UPDATE_TYPE=upsert
+ARG sf
+ARG table_name
+ARG file_name
+ARG stage
+ARG update_type
 
-ENV SF=${SF}
-ENV MYSQL_USER=mysqluser
-ENV MYSQL_PASSWORD=mysqlpw
-ENV MYSQL_DATABASE=tpch_s${SF}
-ENV MYSQL_ROOT_PASSWORD=rootpw
-ENV MYSQL_HOST=mysql
-ENV TABLE_NAME=${TABLE_NAME}
-ENV FILE_NAME=${FILE_NAME}
-ENV STAGE=${STAGE}
-ENV UPDATE_TYPE=${UPDATE_TYPE}
+ENV SF=${sf}
+ENV MYSQL_DATABASE=tpch_s${sf}
+ENV TABLE_NAME=${table_name}
+ENV FILE_NAME=${file_name}
+ENV STAGE=${stage}
+ENV UPDATE_TYPE=${update_type}
 
 RUN cp init-db.sh load-data.sh /docker-entrypoint-initdb.d/ \
     && mv *.cnf /etc/mysql/conf.d/ \

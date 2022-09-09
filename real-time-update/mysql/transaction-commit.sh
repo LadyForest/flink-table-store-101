@@ -27,7 +27,7 @@ if [[ ${STAGE} == "update" ]]; then
     /usr/local/bin/load-data.sh
     if [[ ${UPDATE_TYPE} == "upsert" ]]; then
         echo "commit upsert changes"
-        mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} -h${MYSQL_HOST} ${MYSQL_DATABASE} -e "
+        mysql -uroot -p${MYSQL_ROOT_PASSWORD} -hlocalhost ${MYSQL_DATABASE} -e "
         USE ${MYSQL_DATABASE};
 
         BEGIN;
@@ -35,7 +35,7 @@ if [[ ${STAGE} == "update" ]]; then
         COMMIT;"
     elif [[ ${UPDATE_TYPE} == "delete" ]]; then
         echo "commit delete changes"
-        mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} -h${MYSQL_HOST} ${MYSQL_DATABASE} -e "
+        mysql -uroot -p${MYSQL_ROOT_PASSWORD} -hlocalhost ${MYSQL_DATABASE} -e "
         BEGIN;
         DELETE FROM ${TABLE_NAME} WHERE l_orderkey IN (SELECT dl_orderkey FROM delete_${TABLE_NAME});
         COMMIT;"

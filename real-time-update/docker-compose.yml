@@ -28,7 +28,17 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - SF=1 # be careful to change scale factor
+        - sf=1 # be careful to change scale factor
+        - table_name=lineitem
+        - file_name=lineitem.tbl
+        - stage=init
+        - update_type=none
+      network: host
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpw
     init: true
+    privileged: true
+    extra_hosts:
+      - "mysql.docker.internal:127.0.0.1"
     ports:
-      - "3306:3306"
+      - "3307:3306" # incase port conflict

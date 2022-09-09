@@ -27,7 +27,7 @@ elif [[ ${STAGE} == "update" && ${UPDATE_TYPE} == "delete" ]]; then
     table_name="delete_${TABLE_NAME}"    
 fi
 
-time mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} -hl${MYSQL_HOST} ${MYSQL_DATABASE} --local_infile=1 -e "USE ${MYSQL_DATABASE}" -e "
+time mysql -uroot -p${MYSQL_ROOT_PASSWORD} -hlocalhost ${MYSQL_DATABASE} --local_infile=1 -e "USE ${MYSQL_DATABASE}" -e "
     LOAD DATA LOCAL INFILE '${FILE_NAME}'
     IGNORE INTO TABLE ${table_name}
     FIELDS TERMINATED BY '|'
