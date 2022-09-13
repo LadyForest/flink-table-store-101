@@ -28,11 +28,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - sf=1 # be careful to change scale factor
-        - table_name=lineitem
-        - file_name=lineitem.tbl
-        - stage=init
-        - update_type=none
+        # scale factor set to 10, this will generate ~60 Million records with ~7.2 GB
+        - sf=10
       network: host
     environment:
       - MYSQL_ROOT_PASSWORD=rootpw
@@ -41,4 +38,5 @@ services:
     extra_hosts:
       - "mysql.docker.internal:127.0.0.1"
     ports:
-      - "3307:3306" # incase port conflict
+      # incase port conflict
+      - "3307:3306"

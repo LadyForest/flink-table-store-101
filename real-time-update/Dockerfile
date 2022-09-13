@@ -16,27 +16,19 @@
 # limitations under the License.
 ###############################################################################
 
-FROM mysql:8.0
+FROM mysql:latest
 WORKDIR /tpch/dbgen/
 COPY --from=iamjane/tpch-mysql:latest /tpch/dbgen/ /tpch/dbgen/
 COPY ./mysql/ /tpch/dbgen/
 
-ARG sf
-ARG table_name
-ARG file_name
-ARG stage
-ARG update_type
+ARG sf=1
 
 ENV SF=${sf}
-ENV MYSQL_DATABASE=tpch_s${sf}
-ENV TABLE_NAME=${table_name}
-ENV FILE_NAME=${file_name}
-ENV STAGE=${stage}
-ENV UPDATE_TYPE=${update_type}
+ENV MYSQL_DATABASE=tpch_s${SF}
 
-RUN cp init-db.sh load-data.sh /docker-entrypoint-initdb.d/ \
+RUN chown -R mysql:mysql /tpch/dbgen/ /docker-entrypoint-initdb.d/ \
     && mv *.cnf /etc/mysql/conf.d/ \
-    && mv *.sh /usr/local/bin/ \
-    && chown -R mysql:mysql /tpch/dbgen/ /docker-entrypoint-initdb.d/ \
-    && chmod +x /usr/local/bin/*.sh \
-    && ./dbgen -v -s ${SF} -T L
+    && chmod +x /tpch/dbgen/*.sh \
+    && time /tpch/dbgen/gen_data.sh 1 2 \
+    && mv a_init_db.sh load_data.sh /docker-entrypoint-initdb.d/ \
+    && chmod +x /docker-entrypoint-initdb.d/*.sh
