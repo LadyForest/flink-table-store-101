@@ -1,5 +1,5 @@
 # Real-time Update
-*Read this in other languages* [简体中文](https://github.com/LadyForest/flink-table-store-101/tree/master/real-time-update)
+*Read this in other languages* [简体中文](https://github.com/LadyForest/flink-table-store-101/blob/master/real-time-update/README.zh.md)
 
 ## Brief Introduction
 This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) supports real-time records updates at the sacle of ten millions.
