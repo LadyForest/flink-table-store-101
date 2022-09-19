@@ -6,6 +6,7 @@ This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) suppo
 
 - About Data Genration  
 [TPC-H](https://www.tpc.org/tpch/) as a classic Ad-hoc query benchmark，it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses Q1 and Q6 to illustrate the how FTS supports real-time records updates at the sacle of ten millions.
+![diagram](./pictures/diagram.png)
 
 - About Business Insights (This is directly from the TPC-H Specification) 
   
@@ -15,10 +16,9 @@ This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) suppo
     This query quantifies the amount of revenue increase that would have resulted from eliminating certain company- wide discounts in a given percentage range in a given year. Asking this type of "what if" query can be used to look for ways to increase revenues. The Forecasting Revenue Change Query considers all the lineitems shipped in a given year with discounts between DISCOUNT-0.01 and DISCOUNT+0.01. The query lists the amount by which the total revenue would have increased if these discounts had been eliminated for lineitems with l_quantity less than quantity. Note that the potential revenue increase is equal to the sum of [l_extendedprice * l_discount] for all lineitems with discounts and quantities in the qualifying range.
 
 - Brief Step Summary 
-  1. Start MySQL container via docker-compose, and generate the lineitem data with scale factor 10 and chunk number 8. Each chunk contains about 7.49 million records. Load the first two chunks (*i.e.* 16 million records with two files named `lineitem.tbl.1`, `lineitem.tbl.2`) to the table `lineitem` under the databased `tpch_s10`. It takes about 2-3 minutes to generate the data, and 3-4 minutes to load the data.
+  1. Start MySQL container via docker-compose, and generate the lineitem data with scale factor 10 (about 7.4G and 59 million records). The data will be loaded to the table `lineitem` under the databased `tpch_s10` automatically. It takes about 2-3 minutes to generate the data, and 15-20 minutes to load the data. And then, the New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) will be invoked with 100 as pair number to generate updates.
   2. Download Flink release, Flink CDC Connector and FTS dependencies, with tuned configuration, and start SQL CLI
   3. Build pipelines to sync MySQL lineitem to FTS using Flink CDC and compute the query results.
-  4. Invoke the container to periodicly generate the rest 6 chunks as pure INSERT events to `lineitem` and then invoke `RF2` to generate DELETE events.
 
 
 ## QuickStart 
@@ -29,11 +29,14 @@ Under `flink-table-store-101/real-time-update` directory, please run
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 2G data (The whole data is generated with scale factor 10, and splitted into 8 chunks, each chunk contains about 7.49 million records). The whole process takes abount to 3-4 minitues (it depends). After the build phase, the container is started with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the first two chunks. You can use `docker logs ${container-id}` to track the loading progress, it takes about 3-4 minutes to finish the loading.
+This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 7.4G data (The whole data is generated with scale factor 10, and contains about 59 million records). The build phase process takes abount to 1-2 minitues (it depends). After the build phase, the container is started with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the first two chunks. You can use `docker logs ${container-id}` to track the loading progress, it takes about 15-20 minutes to finish the loading.
 - Note1：You can find container-id by command `docker ps`
 - Note2：You can enter the internal container by `docker exec -it ${container-id} bash`, and the current working directory should be `/tpch/dbgen`, use `wc -l lineitem.tbl.*` to check the the record num and compare with `lineitem` table.
-  ![check data](./pictures/check-import.png)
 - Note3：the loading process completes when you saw the following log
+    ```plaintext
+    Finish loading data, current #(record) is 59986052, and will generate update records in 3 seconds
+    ``` 
+    the updating process completes when you saw the following log
     ```plaintext
     [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.30'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
     ```
@@ -44,7 +47,7 @@ This demo use Flink 1.14.5 ([flink-1.14.5 download link](https://flink.apache.or
 - FTS compiled on Flink 1.14 profile
 - Hadoop Bundle Jar
 
-To ease the preparation，the mentioned dependecies are already packed under the directory of `flink/lib` of this repository, you can directly download and put them under `flink-1.14.5/lib` on your local machine. If you prefer do it by yourself, you can reach to
+To ease the preparation，the mentioned dependecies are already packed under the directory of `real-time-update/flink/lib` of this repository, you can directly download and put them under `flink-1.14.5/lib` on your local machine. If you prefer do it by yourself, you can reach to
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
@@ -80,6 +83,21 @@ state.backend.incremental: true
 jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
 ```
+
+If you want to observe the verbose info of compaction and commit for FTS, you can add the following properties to `log4j.properties` under the `flin-1.14.5/conf`
+
+```
+# Log FTS
+logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
+logger.commit.level = DEBUG
+
+logger.compaction.name = org.apache.flink.table.store.file.mergetree.compact
+logger.compaction.level = DEBUG
+
+logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
+logger.enumerator.level = DEBUG
+```
+
 Then start the cluster by `./bin/start-cluster.sh` under `flink-1.14.5`
 
 ### Step4 - Start Flink SQL CLI with Initialized Schema SQL
@@ -267,3 +285,14 @@ Query Q1 and Q6 under streaming mode
   SET 'parallelism.default' = '1';
   SELECT * FROM ads_potential_revenue_improvement_report;
   ```
+
+
+### Step7 - Finish Demo & Cleanup
+1. Execute `exit;` to exit Flink SQL CLI
+2. Under `flink-1.14.5` directory, execute `./bin/stop-cluster.sh` to stop Flink cluster
+3. Under `table-store-101/real-time-update` directory, execute 
+    ```bash
+    docker-compose down && docker rmi real-time-update_mysql-101 && docker volume prune && docker builder prune
+    ```
+    Note: add `-f` for `prune` at your own risk.
+4. Execute `rm -rf /tmp/table-store-101`    

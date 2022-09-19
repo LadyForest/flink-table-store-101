@@ -17,9 +17,9 @@
 # limitations under the License.
 ###############################################################################
 
-# generate lineitem only, and split into 8 chunks
-start_chunk=$1
-end_chunk=$2
-for chunk in `seq ${start_chunk} ${end_chunk}`; do
-  ./dbgen -v -s ${SF} -C 8 -S ${chunk} -T L
+# generate lineitem only, and split into 16 chunks
+echo "TPC-H Population Generator (Version 3.0.0) starts to generate data with sf = 10 and chunk = 16"
+for chunk in `seq 1 16`; do
+  ./dbgen -q -s ${SF} -C 16 -S ${chunk} -T L &
 done
+wait

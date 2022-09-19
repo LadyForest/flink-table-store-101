@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # scale factor set to 10, this will generate ~60 Million records with ~7.2 GB
+        # scale factor set to 10, this will generate ~59 Million records with ~7 GB
         - sf=10
       network: host
     environment:

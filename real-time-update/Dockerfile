@@ -29,6 +29,6 @@ ENV MYSQL_DATABASE=tpch_s${SF}
 RUN chown -R mysql:mysql /tpch/dbgen/ /docker-entrypoint-initdb.d/ \
     && mv *.cnf /etc/mysql/conf.d/ \
     && chmod +x /tpch/dbgen/*.sh \
-    && time /tpch/dbgen/gen_data.sh 1 2 \
-    && mv a_init_db.sh load_data.sh /docker-entrypoint-initdb.d/ \
-    && chmod +x /docker-entrypoint-initdb.d/*.sh
+    && mv *.sh /docker-entrypoint-initdb.d/ \
+    && chmod +x /docker-entrypoint-initdb.d/*.sh \
+    && ln -s /tpch/dbgen/dbgen /docker-entrypoint-initdb.d/dbgen

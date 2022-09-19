@@ -5,7 +5,8 @@
 Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更新场景展示
 
 - 关于数据生成  
-[TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 Benchmark，其自身所包含的数据 relation 和 22 个 query 已经涵盖了丰富的商业场景（统计指标与大部分电商需求十分类似）。本用例选取了针对单表查询的 Q1 和 Q6，包含 2 个常见 BI 需求，展示在千万级别数据量时 FTS 的实时更新能力
+[TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 Benchmark，其自身所包含的数据 relation 和 22 个 query 已经涵盖了丰富的商业场景（统计指标与大部分电商需求十分类似）。本用例选取了针对单表查询的 Q1 和 Q6，包含 2 个常见 BI 需求，展示在千万级别数据量时 FTS 的实时更新能力，整体流程如下图所示
+![diagram](./pictures/diagram.png)
 
 - 商业洞察需求  
   
@@ -13,25 +14,28 @@ Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更�
   2. 通过特定的销量和折扣过滤出一批商品，如果取消折扣，能在多大程度上降低成本，提升利润（对应 TPC-H Q6）
 
 - 步骤简介 
-  1. 通过 docker-compose 启动服务，以 scale factor 10, chunk number 8 初始化 MySQL container, 每个 chunk 约有 750 万条数据, 导入前 2 个 chunk，产生约 1千 600 万条订单明细（耗时约 3 分钟），产生的文件名为 `lineitem.tbl.1`, `lineitem.tbl.2`, 并自动导入到名为 `tpch_s10` 数据库下面的 `lineitem` 表
+  1. 通过 docker-compose 启动服务，以 scale factor 10 初始化 MySQL container, 产生约五千九百万条订单明细（约 7.4 G），并自动导入到名为 `tpch_s10` 数据库下面的 `lineitem` 表；紧接着会触发 TPC-H toolkit 产生 100 组 RF1（新增订单） 和 RF2（删除订单）
   2. 在本地下载 Flink、Flink CDC 及 FTS 相关依赖，修改配置，启动 SQL CLI
   3. 将 MySQL 订单明细表通过 Flink CDC 同步到 FTS 对应表，并启动 Q1 和 Q6 的实时写入任务
-  4. 通过脚本触发生成剩余 6 个 chunk 作为 INSERT 消息，并以固定间隔向 `lineitem` 插入 RF2 产生的删除订单作为 DELETE 消息，在上一步中查看更新结果
 
 
 ## 快速开始 
 
 ### 第一步：构建镜像，启动容器服务
-在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，如果无法调整，请将 docker-compose 文件中第 32 行 `sf` 改为 1  
+在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 700M 数据）
 在 `flink-table-store-101/real-time-update` 目录下运行
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-构建镜像阶段将会使用 TPC-H 自带工具产生约 2G 数据 (scale factor = 10, 分为 8 个 chunk，每个 chunk 记录数约为 749 万条)，整个构建过程大约需要 3 分钟左右，镜像构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表，并通过 `LOAD DATA INFILE` 自动导入前 2 个 chunk。可以通过 `docker logs ${container-id}` 来查看导入进度，此过程耗时约 3-4 分钟
+构建镜像阶段将会使用 TPC-H 自带工具产生约 7.4G 数据 (scale factor = 10)，整个构建过程大约需要 1-2 分钟左右，镜像构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker logs ${container-id}` 来查看导入进度，此过程耗时约 15-20 分钟
 - 注1：container-id 可以通过 `docker ps` 命令获取
 - 注2：还可以通过 `docker exec -it ${container-id} bash` 进入容器内部，当前工作目录即为 `/tpch/dbgen`, 用 `wc -l lineitem.tbl.*` 查看产生的数据行数；与导入 MySQL 的数据进行比对
-  ![check data](./pictures/check-import.png)
-- 注3：当看到如下日志时，说明导入已经完成
+- 注3：当看到如下日志时，说明全量数据已经导入完成 
+    ```plaintext
+    Finish loading data, current #(record) is 59986052, and will generate update records in 3 seconds
+    ``` 
+
+    当看到如下日志时，说明增量数据已导入完成
     ```plaintext
     [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.30'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
     ```
@@ -42,7 +46,7 @@ Demo 运行使用 Flink 1.14.5 版本（ [flink-1.14.5 下载链接](https://fli
 - 及基于 Flink 1.14 编译的 FTS
 - Hadoop Bundle Jar
 
-为方便操作，您可以直接在本项目的 `flink/lib` 目录下载所有依赖，并放置于 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
+为方便操作，您可以直接在本项目的 `real-time-update/flink/lib` 目录下载所有依赖，并放置于 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
@@ -77,6 +81,19 @@ state.backend: rocksdb
 state.backend.incremental: true
 jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
+```
+
+若想观察 FTS 的异步合并、提交即流读等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，增加如下配置
+```
+# Log FTS
+logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
+logger.commit.level = DEBUG
+
+logger.compaction.name = org.apache.flink.table.store.file.mergetree.compact
+logger.compaction.level = DEBUG
+
+logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
+logger.enumerator.level = DEBUG
 ```
 然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
 
@@ -268,3 +285,13 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
   SET 'parallelism.default' = '1';
   SELECT * FROM ads_potential_revenue_improvement_report;
   ```
+
+### 第七步：结束 Demo & 释放资源
+1. 执行 `exit;` 退出 Flink SQL CLI
+2. 在 `flink-1.14.5` 下执行 `./bin/stop-cluster.sh` 停止 Flink 集群
+3. 在 `table-store-101/real-time-update` 目录下执行 
+    ```bash
+    docker-compose down && docker rmi real-time-update_mysql-101 && docker volume prune && docker builder prune
+    ```
+    注意：请自行判断是否要增加 `-f` 来强制执行 `prune`
+4. 执行 `rm -rf /tmp/table-store-101`   
