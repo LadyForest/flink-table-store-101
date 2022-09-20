@@ -7,6 +7,98 @@ This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) suppo
 - About Data Genration  
 [TPC-H](https://www.tpc.org/tpch/) as a classic Ad-hoc query benchmark，it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses Q1 and Q6 to illustrate the how FTS supports real-time records updates at the sacle of ten millions.
 ![diagram](./pictures/diagram.png)
+The schema of `lineitem` is listed as follow, and each row takes up to 128 bytes.
+  <table>
+      <thead>
+          <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Description</th>
+          </tr>
+      </thead>
+      <tbody>
+          <tr>
+            <td>l_orderkey</td>
+            <td>INT NOT NULL</td>
+            <td>main order's key, the first part of composite primary key </td>
+          </tr>
+          <tr>
+            <td>l_partkey</td>
+            <td>INT NOT NULL</td>
+            <td>part's key</td>
+          </tr>
+          <tr>
+            <td>l_suppkey</td>
+            <td>INT NOT NULL</td>
+            <td>supplier's key</td>
+          </tr>
+          <tr>
+            <td>l_linenumber</td>
+            <td>INT NOT NULL</td>
+            <td>line order's key, the second part of composite primary key</td>
+          </tr>
+          <tr>
+            <td>l_quantity</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>part's quantity</td>
+          </tr>
+          <tr>
+            <td>l_extendedprice</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>part's price</td>
+          </tr>
+          <tr>
+            <td>l_discount</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>part's discount</td>
+          </tr>
+          <tr>
+            <td>l_tax</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>part's tax</td>
+          </tr>
+          <tr>
+            <td>l_returnflag</td>
+            <td>CHAR(1) NOT NULL</td>
+            <td>return flag of order,<code>A</code> stands for accepted, <code>R</code> stands for returned, <code>N</code> stands for none<td>
+          </tr>
+          <tr>
+            <td>l_linestatus</td>
+            <td>CHAR(1) NOT NULL</td>
+            <td>status of line order, if l_shipdate > 1995-06-17, status is denoted as <code>O</code>, o.w. <code>F</code></td>
+          </tr>
+          <tr>
+            <td>l_shipdate</td>
+            <td>DATE NOT NULL</td>
+            <td>date of order shipment</td>
+          </tr>
+          <tr>
+            <td>l_commitdate</td>
+            <td>DATE NOT NULL</td>
+            <td>date of order placement</td>
+          </tr>
+          <tr>
+            <td>l_receiptdate</td>
+            <td>DATE NOT NULL</td>
+            <td>date of order receipt</td>
+          </tr>
+          <tr>
+            <td>l_shipinstruct</td>
+            <td>CHAR(25) NOT NULL</td>
+            <td>ship instructions, such as <code>DELIVER IN PERSON</code>, <code>TAKE BACK RETURN</code>, <code>COLLECT COD</code></td>
+          </tr>
+          <tr>
+            <td>l_shipmode</td>
+            <td>CHAR(10) NOT NULL</td>
+            <td>E.g. <code>SHIP</code>, <code>AIR</code>, <code>TRUCK</code>, <code>MAIL</code> etc.</td>
+          </tr>
+          <tr>
+            <td>l_comment</td>
+            <td>VARCHAR(44) NOT NULL</td>
+            <td>comment on orders</td>
+          </tr>
+      </tbody>
+  </table>
 
 - About Business Insights (This is directly from the TPC-H Specification) 
   
@@ -47,11 +139,11 @@ This demo use Flink 1.14.5 ([flink-1.14.5 download link](https://flink.apache.or
 - FTS compiled on Flink 1.14 profile
 - Hadoop Bundle Jar
 
-To ease the preparation，the mentioned dependecies are already packed under the directory of `real-time-update/flink/lib` of this repository, you can directly download and put them under `flink-1.14.5/lib` on your local machine. If you prefer do it by yourself, you can reach to
+To ease the preparation，the mentioned dependecies are already packed under the directory of `flink-table-store-101/flink/lib` of this repository, you can directly download and put them under `flink-1.14.5/lib` on your local machine. If you prefer do it by yourself, you can reach to
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
-- Use JKD8 and `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` [Build FTS from Source](https://nightlies.apache.org/flink/flink-table-store-docs-master/docs/engines/build/) the latest FTS, please mind that it should be done at the branch of release-0.2.
+- Switch to master branch and use JKD8 and `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` [Build FTS from Source](https://nightlies.apache.org/flink/flink-table-store-docs-master/docs/engines/build/) the latest FTS.
 
 Now you can list the `lib` directory to check the completeness of denepdnecies.
 ```
@@ -84,7 +176,7 @@ jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
 ```
 
-If you want to observe the verbose info of compaction and commit for FTS, you can add the following properties to `log4j.properties` under the `flin-1.14.5/conf`
+If you want to observe the verbose info of compaction and commit for FTS, you can add the following properties to `log4j.properties` under the `flin-1.14.5/conf` as needed
 
 ```
 # Log FTS
@@ -147,7 +239,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
 
 
 -- DWD table schema
--- Let `l_shipdate` be the event time to create a multi-partitioned table with `l_year`+ `l_month` as partition keys, note that all partition keys are included primary keys as well
+-- Let `l_shipdate` be the event time to create a partitioned table with `l_year` as partition key, note that all partition keys are included primary keys as well
 CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_orderkey` INT NOT NULL,
   `l_partkey` INT NOT NULL,
@@ -166,9 +258,8 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_shipmode` CHAR(10) NOT NULL,
   `l_comment` VARCHAR(44) NOT NULL,
   `l_year` BIGINT NOT NULL,
-  `l_month` BIGINT NOT NULL,
-  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`, `l_month`) NOT ENFORCED
-) PARTITIONED BY (`l_year`, `l_month`) WITH (
+  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`) NOT ENFORCED
+) PARTITIONED BY (`l_year`) WITH (
   -- 2 bucket under each partition
   'bucket' = '2',
   -- Set changelog-producer as 'input'，this will inform the CDC source not to drop update_before, and the downstream pipelines which consume dwd_lineitem as a source will not generate changelog-normalize operator
@@ -228,8 +319,7 @@ Then start SQL CLI
     `l_shipinstruct`,
     `l_shipmode`,
     `l_comment`,
-    YEAR(`l_shipdate`) AS `l_year`,
-    MONTH(`l_shipdate`) AS `l_month`
+    YEAR(`l_shipdate`) AS `l_year`
   FROM `ods_lineitem`;
   ```
 
@@ -249,7 +339,7 @@ Then start SQL CLI
     AVG(`l_discount`) AS `avg_discount`,
     COUNT(*) AS `count_order`
   FROM `dwd_lineitem`
-  WHERE (`l_year` < 1998 OR (`l_year` = 1998 AND `l_month` <= 9))
+  WHERE `l_year` <= 1998
   AND `l_shipdate` <= DATE '1998-12-01' - INTERVAL '90' DAY
   GROUP BY  
     `l_returnflag`,

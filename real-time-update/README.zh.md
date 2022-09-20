@@ -5,8 +5,100 @@
 Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更新场景展示
 
 - 关于数据生成  
-[TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 Benchmark，其自身所包含的数据 relation 和 22 个 query 已经涵盖了丰富的商业场景（统计指标与大部分电商需求十分类似）。本用例选取了针对单表查询的 Q1 和 Q6，包含 2 个常见 BI 需求，展示在千万级别数据量时 FTS 的实时更新能力，整体流程如下图所示
+[TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 Benchmark，其自身所包含的数据 relation 和 22 个 query 已经涵盖了丰富的商业场景（统计指标与大部分电商需求十分类似）。本用例选取了针对订单明细表 `lineitem` 查询的 Q1 和 Q6，包含 2 个常见 BI 需求，展示在千万级别数据量时 FTS 的实时更新能力，整体流程如下图所示
 ![diagram](./pictures/diagram.png)
+`lineitem` 的 schema 如下表所示，每行记录在 128 bytes 左右
+  <table>
+      <thead>
+          <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+          </tr>
+      </thead>
+      <tbody>
+          <tr>
+            <td>l_orderkey</td>
+            <td>INT NOT NULL</td>
+            <td>主订单 key（即主订单 ID）联合主键第一位</td>
+          </tr>
+          <tr>
+            <td>l_partkey</td>
+            <td>INT NOT NULL</td>
+            <td>配件 key（即商品 ID）</td>
+          </tr>
+          <tr>
+            <td>l_suppkey</td>
+            <td>INT NOT NULL</td>
+            <td>供应商 key（即卖家 ID）</td>
+          </tr>
+          <tr>
+            <td>l_linenumber</td>
+            <td>INT NOT NULL</td>
+            <td>子订单 key（即子订单 ID）联合主键第二位</td>
+          </tr>
+          <tr>
+            <td>l_quantity</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>商品数量</td>
+          </tr>
+          <tr>
+            <td>l_extendedprice</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>商品价格</td>
+          </tr>
+          <tr>
+            <td>l_discount</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>商品折扣</td>
+          </tr>
+          <tr>
+            <td>l_tax</td>
+            <td>DECIMAL(15, 2) NOT NULL</td>
+            <td>商品税</td>
+          </tr>
+          <tr>
+            <td>l_returnflag</td>
+            <td>CHAR(1) NOT NULL</td>
+            <td>订单签收标志，<code>A</code> 代表 accepted 签收，<code>R</code> 代表 returned 拒收，<code>N</code> 代表 none 未知<td>
+          </tr>
+          <tr>
+            <td>l_linestatus</td>
+            <td>CHAR(1) NOT NULL</td>
+            <td>子订单状态，发货日期晚于 1995-06-17 之前的订单标记为 <code>O</code>，否则标记为 <code>F</code></td>
+          </tr>
+          <tr>
+            <td>l_shipdate</td>
+            <td>DATE NOT NULL</td>
+            <td>订单发货日期</td>
+          </tr>
+          <tr>
+            <td>l_commitdate</td>
+            <td>DATE NOT NULL</td>
+            <td>订单提交日期</td>
+          </tr>
+          <tr>
+            <td>l_receiptdate</td>
+            <td>DATE NOT NULL</td>
+            <td>收货日期</td>
+          </tr>
+          <tr>
+            <td>l_shipinstruct</td>
+            <td>CHAR(25) NOT NULL</td>
+            <td>收货要求，比如 <code>DELIVER IN PERSON</code>本人签收，<code>TAKE BACK RETURN</code> 退货，<code>COLLECT COD</code> 货到付款</td>
+          </tr>
+          <tr>
+            <td>l_shipmode</td>
+            <td>CHAR(10) NOT NULL</td>
+            <td>快递模式，有 <code>SHIP</code> 海运，<code>AIR</code> 空运，<code>TRUCK</code> 陆运，<code>MAIL</code> 邮递等类型</td>
+          </tr>
+          <tr>
+            <td>l_comment</td>
+            <td>VARCHAR(44) NOT NULL</td>
+            <td>订单注释</td>
+          </tr>
+      </tbody>
+  </table>
 
 - 商业洞察需求  
   
@@ -43,14 +135,14 @@ docker-compose build --no-cache && docker-compose up -d --force-recreate
 ### 第二步：下载 Flink、FTS 及其他所需依赖
 Demo 运行使用 Flink 1.14.5 版本（ [flink-1.14.5 下载链接](https://flink.apache.org/downloads.html#apache-flink-1145) ），需要的其它依赖如下
 - Flink MySQL CDC Connector 
-- 及基于 Flink 1.14 编译的 FTS
+- 基于 Flink 1.14 编译的 FTS
 - Hadoop Bundle Jar
 
-为方便操作，您可以直接在本项目的 `real-time-update/flink/lib` 目录下载所有依赖，并放置于 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
+为方便操作，您可以直接在本项目的 `flink-table-store-101/flink/lib` 目录下载所有依赖，并放置于 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
-- 使用 JKD8 及 `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` [编译](https://nightlies.apache.org/flink/flink-table-store-docs-master/docs/engines/build/) 最新发布的 FTS release-0.2 版本，注意切换到 release-0.2 分支
+- 获取最新 master 分支并使用 JKD8 及 `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` [编译](https://nightlies.apache.org/flink/flink-table-store-docs-master/docs/engines/build/) FTS release-0.3 版本
 
 上述步骤完成后，lib 目录结构如图所示  
 ```
@@ -83,19 +175,19 @@ jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
 ```
 
-若想观察 FTS 的异步合并、提交即流读等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，增加如下配置
-```
-# Log FTS
-logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
-logger.commit.level = DEBUG
+- 注：若想观察 FTS 的异步合并、提交即流读等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，按需增加如下配置
+    ```
+    # Log FTS
+    logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
+    logger.commit.level = DEBUG
 
-logger.compaction.name = org.apache.flink.table.store.file.mergetree.compact
-logger.compaction.level = DEBUG
+    logger.compaction.name = org.apache.flink.table.store.file.mergetree.compact
+    logger.compaction.level = DEBUG
 
-logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
-logger.enumerator.level = DEBUG
-```
-然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
+    logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
+    logger.enumerator.level = DEBUG
+    ```
+这里我们只开启提交记录的 DEBUG，然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
 
 ### 第四步：初始化表 schema 并启动 Flink SQL CLI
 在 `flink-1.14.5` 目录下新建 `schema.sql` 文件，配置用例所需表的 schema 和 FTS Catalog 作为 init sql
@@ -144,7 +236,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
 
 
 -- DWD table schema
--- 以 `l_shipdate` 为业务日期，创建以 `l_year`+ `l_month` 两级分区的表，注意所有 partition key 都需要声明在 primary key 中
+-- 以 `l_shipdate` 为业务日期，创建以 `l_year` 分区的表，注意所有 partition key 都需要声明在 primary key 中
 CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_orderkey` INT NOT NULL,
   `l_partkey` INT NOT NULL,
@@ -163,9 +255,8 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_shipmode` CHAR(10) NOT NULL,
   `l_comment` VARCHAR(44) NOT NULL,
   `l_year` BIGINT NOT NULL,
-  `l_month` BIGINT NOT NULL,
-  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`, `l_month`) NOT ENFORCED
-) PARTITIONED BY (`l_year`, `l_month`) WITH (
+  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`) NOT ENFORCED
+) PARTITIONED BY (`l_year`) WITH (
   -- 每个 partition 下设置 2 个 bucket
   'bucket' = '2',
   -- 设置 changelog-producer 为 'input'，这会使得上游 CDC Source 不丢弃 update_before，并且下游消费 dwd_lineitem 时没有 changelog-normalize 节点
@@ -226,8 +317,7 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
     `l_shipinstruct`,
     `l_shipmode`,
     `l_comment`,
-    YEAR(`l_shipdate`) AS `l_year`,
-    MONTH(`l_shipdate`) AS `l_month`
+    YEAR(`l_shipdate`) AS `l_year`
   FROM `ods_lineitem`;
   ```
 
@@ -248,7 +338,7 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
     AVG(`l_discount`) AS `avg_discount`,
     COUNT(*) AS `count_order`
   FROM `dwd_lineitem`
-  WHERE (`l_year` < 1998 OR (`l_year` = 1998 AND `l_month` <= 9))
+  WHERE `l_year` <= 1998
   AND `l_shipdate` <= DATE '1998-12-01' - INTERVAL '90' DAY
   GROUP BY  
     `l_returnflag`,
@@ -268,20 +358,44 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
   AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01 AND l_quantity < 24;
 ```
 ### 第六步：执行 Ad-hoc query
-在 streaming 模式下同时查询 Q1 和 Q6 需要两个 SQL CLI
-- 在 `/flink` 目录下执行 `./bin/sql-client.sh -i schema.sql` 打开第二个 CLI
+- 方式一: 批量查询  
+  切换到 batch 模式执行 static query, 可以多运行几次来查看结果变化（注：查询间隔应大于所查上游表的 checkpoint 间隔）
+  - 查询 Q1
+    1. 切换到 batch 模式  
+      `SET 'execution.runtime-mode' = 'batch';`
+    2. 将结果展示切换为 `tableau` 模式  
+      `SET 'sql-client.execution.result-mode' = 'tableau';`
+    3. 设置作业名
+      `SET 'pipeline.name' = 'Batch Query on Pricing Summary Report';`
+    4. 执行查询  
+      `SELECT * FROM ads_pricing_summary_report;`
+  - 查询 Q6
+    1. 切换到 batch 模式  
+      `SET 'execution.runtime-mode' = 'batch';`
+    2. 将结果展示切换为 `tableau` 模式  
+      `SET 'sql-client.execution.result-mode' = 'tableau';`
+    3. 设置作业并发为 1  
+      `SET 'parallelism.default' = '1';`
+    4. 设置作业名
+      `SET 'pipeline.name' = 'Batch Query on Potential Revenue Report';`
+    5. 执行查询  
+      `SELECT * FROM ads_potential_revenue_improvement_report;`
+
+- 方式二：流式查询  
+  在 streaming 模式下同时查询 Q1 和 Q6 需要两个 SQL CLI
+  在 `/flink` 目录下执行 `./bin/sql-client.sh -i schema.sql` 打开第二个 CLI
 - 在两个 CLI 下 分别执行
   ```sql
   SET 'sql-client.execution.result-mode' = 'table';
   SET 'execution.runtime-mode' = 'streaming';
-  SET 'pipeline.name' = 'Q1-Pricing Summary Report';
+  SET 'pipeline.name' = 'Streaming Query on Pricing Summary Report';
   SET 'parallelism.default' = '2';
   SELECT * FROM ads_pricing_summary_report;
   ```
   ```sql
   SET 'sql-client.execution.result-mode' = 'table';
   SET 'execution.runtime-mode' = 'streaming';
-  SET 'pipeline.name' = 'Q6-Potential Revenue Report';
+  SET 'pipeline.name' = 'Streaming Query on Potential Revenue Report';
   SET 'parallelism.default' = '1';
   SELECT * FROM ads_potential_revenue_improvement_report;
   ```
