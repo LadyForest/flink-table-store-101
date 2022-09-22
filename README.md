@@ -15,13 +15,12 @@ A playground for [Flink Table Store](https://github.com/apache/flink-table-store
     </thead>
     <tbody>
         <tr>
-          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/real-time-update">real-time-update</a></code></b></td>
-            <td>MySQL, Flink, Flink CDC</td>
+          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/real-time-update">Real-time Full and Incremental Snapshot Loading - Flink Table Store as a Streaming Lakehouse</a></code></b></td>
+            <td rowspan=2>MySQL, Flink, Flink CDC</td>
             <td rowspan=2>Building streaming ETL pipelines for business analytics based on <a href="https://www.tpc.org/tpch/">TPC-H dataset</a></td>
         </tr>
         <tr>
-          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join">lookup-join</a></code></b></td>
-            <td>MySQL, Flink, Flink CDC</td>
+          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join">lookup-join(TODO)</a></code></b></td>
         </tr>
     </tbody>
 </table>

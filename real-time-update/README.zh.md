@@ -1,10 +1,10 @@
-# 实时更新
+# 全增量一体 CDC 实时入湖
 *其它语言版本* [English](https://github.com/LadyForest/flink-table-store-101/tree/master/real-time-update)
 
 ## 用例简介
 作为支持实时更新的高性能湖存储，本用例展示了在五千万数据规模下使用单机全量同步 MySQL 订单表到 Flink Table Store（以下简称 **FTS**） 明细表、下游计算聚合及持续消费更新的能力。
 
-数据源由 [TPC-H](https://www.tpc.org/tpch/) toolkit 生成并导入 MySQL，在写入 FTS 时以 `l_shipdate` 字段作为业务时间，生成分区字段 `l_year` 和 `l_month`，时间跨度从 1992.1-1998.12，共计 84 个分区。经测试，在单机并发为 2，checkpoint interval 为 1min 的配置下，45 min 内写入 59.9 million 全量数据，每 10 分钟的写入性能如下表所示，平均写入性能在 1.3 million/min
+数据源由 [TPC-H](https://www.tpc.org/tpch/) toolkit 生成并导入 MySQL，在写入 FTS 时以 `l_shipdate` 字段作为业务时间定义分区 `l_year` 和 `l_month`，时间跨度从 1992.1-1998.12，动态写入 84 个分区。经测试，在单机并发为 2，checkpoint interval 为 1 min 的配置下，45 min 内写入 59.9 million 全量数据，每 10 min 的写入性能如下表所示，平均写入性能在 1.3 million/min
 <table>
     <thead>
         <tr>
@@ -135,14 +135,14 @@ TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所�
   </table>
 
 ### 业务需求（TPC-H Q1）  
-  
-对发货日期在一定范围内的订单，根据订单状态和收货状态（即 N * M 组合）统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标。
+
+对发货日期在一定范围内的订单，根据订单状态和收货状态统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标。
 
 
 ## 快速开始 
 
 ### 步骤简介
-本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 分钟，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
+本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 min，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
 
 ### 第一步：构建镜像，启动容器服务
 在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 736M 数据） 
@@ -153,7 +153,7 @@ docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
 该命令首先会构建一个自定义 MySQL 镜像，通过 TPC-H 工具自动产生约 7.4G 数据 (scale factor = 10)  
 
-镜像构建过程大约需要 1-2 分钟左右，构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker ps` 获取 container id 后，再通过 `docker logs -f ${container-id}` 来查看导入进度，此过程耗时约 15 分钟
+镜像构建过程大约需要 1-2 min 左右，构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker ps` 获取 container id 后，再通过 `docker logs -f ${container-id}` 来查看导入进度，此过程耗时约 15 min
 
 ![load-data-log](../pictures/load-data-log.png)
 
@@ -214,14 +214,14 @@ execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
     # Log FTS
     logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
     logger.commit.level = DEBUG
-
+    
     logger.compaction.name = org.apache.flink.table.store.file.mergetree.compact
     logger.compaction.level = DEBUG
-
+    
     logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
     logger.enumerator.level = DEBUG
     ```
-这里我们只开启提交记录的 DEBUG，然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
+    这里我们只开启提交记录的 DEBUG，然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
 
 ### 第四步：初始化表 schema 并启动 Flink SQL CLI
 在 `flink-1.14.5` 目录下新建 `schema.sql` 文件，配置用例所需表的 schema 和 FTS Catalog 作为 init sql
@@ -351,7 +351,7 @@ CREATE TABLE IF NOT EXISTS `ads_pricing_summary` (
     MONTH(`l_shipdate`) AS `l_month`
   FROM `ods_lineitem`;
   ```
-可以观察全量同步阶段的 RPS、生成 SNAPSHOT 等信息，也可以切换到 `/tmp/table-store-101/default.db/dwd_lineitem` 目录下，查看生成的 sst 和 manifest 文件
+  可以观察全量同步阶段的 RPS、生成 SNAPSHOT 等信息，也可以切换到 `/tmp/table-store-101/default.db/dwd_lineitem` 目录下，查看生成的 sst 和 manifest 文件
 
 ![file-structure](../pictures/file-structure.gif)
 

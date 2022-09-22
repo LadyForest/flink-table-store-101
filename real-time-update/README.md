@@ -1,13 +1,47 @@
-# Real-time Update
+# Real-time Full and Incremental Snapshot Loading - Flink Table Store as a Streaming Lakehouse
 *Read this in other languages* [简体中文](https://github.com/LadyForest/flink-table-store-101/blob/master/real-time-update/README.zh.md)
 
 ## Brief Introduction
-This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) supports real-time records updates at the sacle of ten millions. It utilizes the [TPC-H](https://www.tpc.org/tpch/) toolkit to generate a MySQL order line table with 59 million records as historical full data, and 6 million new orders and 1.5 million old order deletions as incremental data. Then a streaming ETL pipeline synchronizes the changelog to a DWD table of FTS. The FTS table is multi-partitioned by the year and month. The order's `l_shipdate` is deemed as event time which spans 7 years and generates 84 partitions. It is tested that the overall RPS is ??
-![diagram](./pictures/diagram.png)
+This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) supports real-time records updates at the sacle of ten millions using a laptop. 
+
+It utilizes the [TPC-H](https://www.tpc.org/tpch/) toolkit to generate a MySQL order line table with 59 million records as historical full data. Then a streaming ETL pipeline synchronizes the changelog to a DWD table of FTS. The FTS table is multi-partitioned by the year and month. The order's `l_shipdate` is deemed as event time which spans 7 years and generates 84 partitions. It takes 45 min to finish the full snapshot sync, and the overall RPS is 1.3 million records/min with checkpoint interval as 1 min, parallelism as 2, and bucket number as 2.
+
+<table>
+    <thead>
+        <tr>
+            <th>Duration(min)</th>
+            <th>Rps In (million)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td>10</td>
+          <td>12</td>
+        </tr>
+        <tr>
+          <td>20</td>
+          <td>26</td>
+        </tr>
+        <tr>
+          <td>30</td>
+          <td>40</td>
+        </tr>
+        <tr>
+          <td>40</td>
+          <td>54</td>
+        </tr>
+    </tbody>
+</table>
+
+![dwd-job-1](../pictures/dwd_job_sync.gif)
 
 
-- About Data Genration  
-TPC-H as a classic Ad-hoc query benchmark，it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses Q1 and Q6 to illustrate how FTS supports real-time records updates at the sacle of ten millions.
+The diagram of this demo is listed as follows. The TPC-H toolkit and MySQL is running on a costomized docker container, and Flink release and FTS dependencies are downloaded and running on your host machine.
+![diagram](../pictures/diagram.png) 
+
+
+### About Data Genration  
+TPC-H as a classic Ad-hoc query benchmark，it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses to one single order line table `lineitem` to perform Q1 to illustrate how FTS supports real-time records updates at the sacle of ten millions.
 
 The schema of `lineitem` is listed as follow, and each row takes up to 128 bytes.
   <table>
@@ -102,20 +136,21 @@ The schema of `lineitem` is listed as follow, and each row takes up to 128 bytes
       </tbody>
   </table>
 
-- About Business Insights (This is directly from the TPC-H Specification) 
+### About Business Insights
   
-  1. Pricing Summary Report Query (Q1)  
-    This query reports the amount of business that was billed, shipped, and returned. The Pricing Summary Report Query provides a summary pricing report for all lineitems shipped as of a given date. The date is within 60 - 120 days of the greatest ship date contained in the database. The query lists totals for extended price, discounted extended price, discounted extended price plus tax, average quantity, average extended price, and average discount. These aggregates are grouped by RETURNFLAG and LINESTATUS, and listed in ascending order of RETURNFLAG and LINESTATUS. A count of the number of lineitems in each group is included.
-  2. Forecasting Revenue Change Query (Q6)  
-    This query quantifies the amount of revenue increase that would have resulted from eliminating certain company- wide discounts in a given percentage range in a given year. Asking this type of "what if" query can be used to look for ways to increase revenues. The Forecasting Revenue Change Query considers all the lineitems shipped in a given year with discounts between DISCOUNT-0.01 and DISCOUNT+0.01. The query lists the amount by which the total revenue would have increased if these discounts had been eliminated for lineitems with l_quantity less than quantity. Note that the potential revenue increase is equal to the sum of [l_extendedprice * l_discount] for all lineitems with discounts and quantities in the qualifying range.
-
-- Brief Step Summary 
-  1. Start MySQL container via docker-compose, and generate the lineitem data with scale factor 10 (about 7.4G and 59 million records). The data will be loaded to the table `lineitem` under the database `tpch_s10` automatically. It takes about 2-3 minutes to generate the data, and 15-20 minutes to load the data. And then, the New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) will be invoked with 100 as pair number to generate updates.
-  2. Download Flink release, Flink CDC connector and FTS dependencies, with tuned configuration, and start SQL CLI
-  3. Build pipelines to sync MySQL lineitem to FTS using Flink CDC and compute the query results.
+**Pricing Summary Report Query (Q1)**  
+This query reports the amount of business that was billed, shipped, and returned. The Pricing Summary Report Query provides a summary pricing report for all lineitems shipped as of a given date. The date is within 60 - 120 days of the greatest ship date contained in the database. The query lists totals for extended price, discounted extended price, discounted extended price plus tax, average quantity, average extended price, and average discount. These aggregates are grouped by RETURNFLAG and LINESTATUS, and listed in ascending order of RETURNFLAG and LINESTATUS. A count of the number of lineitems in each group is included.
 
 
-## QuickStart 
+## Get Started 
+
+### Brief Step Summary 
+  1. Start MySQL container via docker-compose, and the container will generate data with scale factor 10 (about 59 million records) and load data to the table `lineitem` under the database `tpch_s10` automatically. It takes about 2-3 minutes to generate the data, and about 15 minutes to load the data. During this period, you can download and prepare Flink, Flink CDC and FTS dependencies, and start Flink cluster and SQL CLI.
+
+  2. After the load finishes, start the streaming CDC job to sync the full snapshot to FTS DWD table.
+  
+  3. The container maintains a count down timer with 1 hour to invoke TPC-H's New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) to continuously generate new orders and delete orders as updates, with certain intervals. The container keeps generating RF1 and RF2 until it is stopped.
+
 
 ### Step1 - Build Dokcer Image & Start Container
 Before start, please make sure your local machine has a least 20G free Docker Disk Image. If this condition cannot be met, please modify the docker-compose yaml at line 32 to change `sf` to 1.  
@@ -123,22 +158,23 @@ Under `flink-table-store-101/real-time-update` directory, please run
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 7.4G data (The whole data is generated with scale factor 10, and contains about 59 million records). The build phase process takes abount to 2-3 minitues (it depends). After the build phase, the container is started with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the data. You can use `docker logs ${container-id}` to track the loading progress, it takes about 15-20 minutes to finish the loading.
-- Note1：You can find container-id by command `docker ps`
-- Note2：You can enter the internal container by `docker exec -it ${container-id} bash`, and the current working directory should be `/tpch/dbgen`, use `wc -l lineitem.tbl.*` to check the the record num and compare with `lineitem` table.
-- Note3：the loading process completes when you saw the following log
-    ```plaintext
-    Finish loading data, current #(record) is 59986052, and will generate update records in 3 seconds
-    ``` 
-    the updating process completes when you saw the following log
-    ```plaintext
-    [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.30'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
-    ```
+This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 59 million records. The build phase process takes abount to 1-2 minitues (it depends). After the build phase, the container is started with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the data. You can use `docker ps` to find the container id, and then use `docker logs ${container-id}` to track the loading progress, it takes about 15 minutes to finish the loading.
+![load-data-log](../pictures/load-data-log.png)
+
+
+Meanwhile, you can also enter the internal container by `docker exec -it ${container-id} bash`, and the current working directory should be `/tpch/dbgen`, use `wc -l lineitem.tbl.*` to check the the record num and compare with `lineitem` table.
+![wc-l](../pictures/wc-l.png)
+
+
+**The loading process completes when you saw the following log, which means you can start the Flink CDC job now**
+```plaintext
+Finish loading data, current #(record) is 59986052
+``` 
 
 ### Step2 - Download Flink Release, FTS and Other Dependencies
 This demo use Flink 1.14.5 ([flink-1.14.5 download link](https://flink.apache.org/downloads.html#apache-flink-1145)). Besides, the rest dependecies needed are
 - Flink MySQL CDC connector 
-- FTS compiled on Flink 1.14 profile
+- FTS compiled on master branch with Flink 1.14 profile
 - Hadoop Bundle Jar
 
 To ease the preparation，the mentioned dependecies are already packed under the directory of `flink-table-store-101/flink/lib` of this repository, you can directly download and put them under `flink-1.14.5/lib` on your local machine. If you prefer do it by yourself, you can also reach to
@@ -260,6 +296,7 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_shipmode` CHAR(10) NOT NULL,
   `l_comment` VARCHAR(44) NOT NULL,
   `l_year` BIGINT NOT NULL,
+  `l_month` BIGINT NOT NULL,
   PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`, `l_month`) NOT ENFORCED
 ) PARTITIONED BY (`l_year`, `l_month`) WITH (
   -- 2 bucket under each partition
@@ -270,7 +307,7 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
 
 -- ADS table schema
 -- Based on TPC-H Q1，for shipped orders, group them by return flag and line status to calcute the order count, item count, total revenue, average base price, average discount price, and average VAT price
-CREATE TABLE IF NOT EXISTS `ads_pricing_summary_report` (
+CREATE TABLE IF NOT EXISTS `ads_pricing_summary` (
   `l_returnflag` CHAR(1) NOT NULL,
   `l_linestatus` CHAR(1) NOT NULL,
   `sum_quantity` DOUBLE NOT NULL,
@@ -284,22 +321,16 @@ CREATE TABLE IF NOT EXISTS `ads_pricing_summary_report` (
 ) WITH (
   'bucket' = '2'
 );
-
--- Based on TPC-H Q6, filter some items by specific condition and find out the potential revenue gain if the discount is canceled
-CREATE TABLE IF NOT EXISTS `ads_potential_revenue_gain_report` (
-  `potential_revenue` DOUBLE NOT NULL
-) WITH (
-  'bucket' = '1'
-);
 ```
 Then start SQL CLI
 ```bash
 ./bin/sql-client.sh -i schema.sql
 ```
-![flink sql cli](./pictures/start-sql-cli.png)
+![flink sql cli](../pictures/start-sql-cli.png)
 
-### Step5 - Submit ETL Pipelines
+### Step5 - Submit FlinkCDC ETL Pipeline
 
+After loading all chunks to MySQL, we can start this job
 - Job1 - `ods_lineitem` to `dwd_lineitem` via Flink MySQL CDC
   ```sql
   SET 'pipeline.name' = 'dwd_lineitem';
@@ -321,9 +352,18 @@ Then start SQL CLI
     `l_shipinstruct`,
     `l_shipmode`,
     `l_comment`,
-    YEAR(`l_shipdate`) AS `l_year`
+    YEAR(`l_shipdate`) AS `l_year`,
+    MONTH(`l_shipdate`) AS `l_month`
   FROM `ods_lineitem`;
   ```
+You can observe the RPS info from the Flink Web UI, and also can switch to `/tmp/table-store-101/default.db/dwd_lineitem` directory to see the table's storage structure, such as snapshot, manifest and sst file etc.
+
+![file-structure](../pictures/file-structure.gif)
+
+### Step6 - Compute Aggregation & Query Indicators
+After completing the full snapshot sync, you can start the ADS aggregation job and query indicators.
+
+- Note: you don't have to wait for the previous job to load all full snapshot, if you do require querying on the indicators in an intermediate phase.
 
 - Job2 - Q1 `ads_pricing_summary_report`
   ```sql
@@ -348,38 +388,46 @@ Then start SQL CLI
     `l_linestatus`;
   ```
 
-- Job3 - Q6 `ads_potential_revenue_gain_report`
+Now we can check the indicators by
 ```sql
-  SET 'pipeline.name' = 'ads_potential_revenue_gain_report';
-  SET 'parallelism.default' = '1';
-  INSERT INTO `ads_potential_revenue_gain_report`
-  SELECT 
-    SUM(`l_extendedprice` * `l_discount`) AS `revenue`
-  FROM `dwd_lineitem`
-  WHERE `l_year` = 1994
-  AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01 AND l_quantity < 24;
+SET 'execution.runtime-mode' = 'batch';
+
+SET 'sql-client.execution.result-mode' = 'tableau';
+
+SET 'pipeline.name' = 'Pricing Summary';
+
+SELECT * FROM ads_pricing_summary;
 ```
-### Step6 - Ad-hoc query
-Switch to batch mode and run the following two queries multiple times to check the refreshment of data. Please note that the interval between same queries should longer than the checkpoint interval.
-  1. Swith to batch mode  
-      `SET 'execution.runtime-mode' = 'batch';`
-  2. Swith result representation to `tableau` mode  
-      `SET 'sql-client.execution.result-mode' = 'tableau';`  
-  3. Query Q1  
-  Set job name  
-  `SET 'pipeline.name' = 'Pricing Summary Report';`
-  Execute the query  
-  `SELECT * FROM ads_pricing_summary_report;`
-  4. Query Q6  
-  Set job's parallelism to 1  
-  `SET 'parallelism.default' = '1';`  
-  Set job name  
-  `SET 'pipeline.name' = 'Potential Revenue Report';`  
-  Execute the query  
-  `SELECT * FROM ads_potential_revenue_gain_report;`
+You can run this query multiple times to see the results change. Note that the query interval should be longer than the checkpoint interval.
+
+![ads-result](../pictures/ads-result.gif)
 
 
-### Step7 - Finish Demo & Cleanup
+### Step7 - Observe the Real-time Updates
+
+When all chunks are loaded into MySQL in Step1, the container will start a count down timer with 1 hour. You can see the log message like
+```
+Refresh Function will be applied after 1h
+```
+
+After that, the container will start an infinite loop to call TPC-H's New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2), which generates new orders and delete orders, as updates to the original `lineitem` table.
+
+```
+Start to apply New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) in infinite loop
+TPC-H Population Generator (Version 3.0.0) starts to generate update set with sf = 10 and total pair = 100
+
+Start to apply New Sales Refresh Function (RF1) for pair 10
+Start to apply Old Sales Refresh Function (RF2) for pair 10
+Start to apply New Sales Refresh Function (RF1) for pair 20
+Start to apply Old Sales Refresh Function (RF2) for pair 20
+...
+```
+And then, you can notice that the incremental snapshot are sync to `dwd_lineitem`.
+
+![updates](../pictures/updates.gif)
+
+
+### Step8 - Finish Demo & Cleanup
 1. Execute `exit;` to exit Flink SQL CLI
 2. Under `flink-1.14.5` directory, execute `./bin/stop-cluster.sh` to stop Flink cluster
 3. Under `table-store-101/real-time-update` directory, execute 
