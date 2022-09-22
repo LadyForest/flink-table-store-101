@@ -20,15 +20,24 @@ FROM mysql:latest
 WORKDIR /tpch/dbgen/
 COPY --from=iamjane/tpch-mysql:latest /tpch/dbgen/ /tpch/dbgen/
 COPY ./mysql/ /tpch/dbgen/
+COPY docker-entrypoint-wrapper.sh /usr/local/bin/
 
 ARG sf=1
+ARG wait_for_update=1m
+ARG total_records=6001215
 
 ENV SF=${sf}
 ENV MYSQL_DATABASE=tpch_s${SF}
+ENV WAIT_FOR_UPDATE=${wait_for_update}
+ENV TOTAL_RECORDS=${total_records}
 
 RUN chown -R mysql:mysql /tpch/dbgen/ /docker-entrypoint-initdb.d/ \
-    && mv *.cnf /etc/mysql/conf.d/ \
+    && mv mysql.cnf /etc/mysql/conf.d/ \
     && chmod +x /tpch/dbgen/*.sh \
-    && mv *.sh /docker-entrypoint-initdb.d/ \
+    && chmod +x /usr/local/bin/docker-entrypoint-wrapper.sh \
+    && mv a_init_db.sh gen_data.sh load_data.sh /docker-entrypoint-initdb.d/ \
     && chmod +x /docker-entrypoint-initdb.d/*.sh \
-    && ln -s /tpch/dbgen/dbgen /docker-entrypoint-initdb.d/dbgen
+    && ln -s dbgen /usr/local/bin/dbgen
+
+ENTRYPOINT [ "docker-entrypoint-wrapper.sh" ]
+CMD [ "mysqld" ]

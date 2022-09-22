@@ -2,12 +2,46 @@
 *其它语言版本* [English](https://github.com/LadyForest/flink-table-store-101/tree/master/real-time-update)
 
 ## 用例简介
-Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更新场景展示
+作为支持实时更新的高性能湖存储，本用例展示了在五千万数据规模下使用单机全量同步 MySQL 订单表到 Flink Table Store（以下简称 **FTS**） 明细表、下游计算聚合及持续消费更新的能力。
 
-- 关于数据生成  
-[TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 Benchmark，其自身所包含的数据 relation 和 22 个 query 已经涵盖了丰富的商业场景（统计指标与大部分电商需求十分类似）。本用例选取了针对订单明细表 `lineitem` 查询的 Q1 和 Q6，包含 2 个常见 BI 需求，展示在千万级别数据量时 FTS 的实时更新能力，整体流程如下图所示
-![diagram](./pictures/diagram.png)
-`lineitem` 的 schema 如下表所示，每行记录在 128 bytes 左右
+数据源由 [TPC-H](https://www.tpc.org/tpch/) toolkit 生成并导入 MySQL，在写入 FTS 时以 `l_shipdate` 字段作为业务时间，生成分区字段 `l_year` 和 `l_month`，时间跨度从 1992.1-1998.12，共计 84 个分区。经测试，在单机并发为 2，checkpoint interval 为 1min 的配置下，45 min 内写入 59.9 million 全量数据，每 10 分钟的写入性能如下表所示，平均写入性能在 1.3 million/min
+<table>
+    <thead>
+        <tr>
+            <th>Duration(min)</th>
+            <th>Rps In (million)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td>10</td>
+          <td>12</td>
+        </tr>
+        <tr>
+          <td>20</td>
+          <td>26</td>
+        </tr>
+        <tr>
+          <td>30</td>
+          <td>40</td>
+        </tr>
+        <tr>
+          <td>40</td>
+          <td>54</td>
+        </tr>
+    </tbody>
+</table>
+
+![dwd-job-1](../pictures/dwd_job_sync.gif)
+
+整体流程如下图所示
+
+![diagram](../pictures/diagram.png)   
+
+### 关于数据生成  
+TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所包含的数据模型与真实的商业场景十分类似。本用例选取其中订单明细表 `lineitem` 和针对它的单表查询 Q1（下文会有详细说明）  
+
+`lineitem` schema 如下表所示，每行记录在 128 bytes 左右
   <table>
       <thead>
           <tr>
@@ -20,22 +54,22 @@ Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更�
           <tr>
             <td>l_orderkey</td>
             <td>INT NOT NULL</td>
-            <td>主订单 key（即主订单 ID）联合主键第一位</td>
+            <td>主订单 key，即主订单 id，联合主键第一位</td>
           </tr>
           <tr>
             <td>l_partkey</td>
             <td>INT NOT NULL</td>
-            <td>配件 key（即商品 ID）</td>
+            <td>配件 key，即商品 id</td>
           </tr>
           <tr>
             <td>l_suppkey</td>
             <td>INT NOT NULL</td>
-            <td>供应商 key（即卖家 ID）</td>
+            <td>供应商 key，即卖家 id</td>
           </tr>
           <tr>
             <td>l_linenumber</td>
             <td>INT NOT NULL</td>
-            <td>子订单 key（即子订单 ID）联合主键第二位</td>
+            <td>子订单 key，即子订单 id，联合主键第二位</td>
           </tr>
           <tr>
             <td>l_quantity</td>
@@ -85,7 +119,7 @@ Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更�
           <tr>
             <td>l_shipinstruct</td>
             <td>CHAR(25) NOT NULL</td>
-            <td>收货要求，比如 <code>DELIVER IN PERSON</code>本人签收，<code>TAKE BACK RETURN</code> 退货，<code>COLLECT COD</code> 货到付款</td>
+            <td>收货信息，比如 <code>DELIVER IN PERSON</code> 本人签收，<code>TAKE BACK RETURN</code> 退货，<code>COLLECT COD</code> 货到付款</td>
           </tr>
           <tr>
             <td>l_shipmode</td>
@@ -100,41 +134,41 @@ Flink Table Store（以下简称 **FTS**）在千万级数据规模的实时更�
       </tbody>
   </table>
 
-- 商业洞察需求  
+### 业务需求（TPC-H Q1）  
   
-  1. 对已发货的订单，根据订单状态和收货状态统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标（对应 TPC-H Q1）
-  2. 通过特定的销量和折扣过滤出一批商品，如果取消折扣，能在多大程度上降低成本，提升利润（对应 TPC-H Q6）
-
-- 步骤简介 
-  1. 通过 docker-compose 启动服务，以 scale factor 10 初始化 MySQL container, 产生约五千九百万条订单明细（约 7.4 G），并自动导入到名为 `tpch_s10` 数据库下面的 `lineitem` 表；紧接着会触发 TPC-H toolkit 产生 100 组 RF1（新增订单） 和 RF2（删除订单）
-  2. 在本地下载 Flink、Flink CDC 及 FTS 相关依赖，修改配置，启动 SQL CLI
-  3. 将 MySQL 订单明细表通过 Flink CDC 同步到 FTS 对应表，并启动 Q1 和 Q6 的实时写入任务
+对发货日期在一定范围内的订单，根据订单状态和收货状态（即 N * M 组合）统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标。
 
 
 ## 快速开始 
 
+### 步骤简介
+本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 分钟，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
+
 ### 第一步：构建镜像，启动容器服务
-在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 700M 数据）
+在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 736M 数据） 
+
 在 `flink-table-store-101/real-time-update` 目录下运行
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-构建镜像阶段将会使用 TPC-H 自带工具产生约 7.4G 数据 (scale factor = 10)，整个构建过程大约需要 1-2 分钟左右，镜像构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker logs ${container-id}` 来查看导入进度，此过程耗时约 15-20 分钟
-- 注1：container-id 可以通过 `docker ps` 命令获取
-- 注2：还可以通过 `docker exec -it ${container-id} bash` 进入容器内部，当前工作目录即为 `/tpch/dbgen`, 用 `wc -l lineitem.tbl.*` 查看产生的数据行数；与导入 MySQL 的数据进行比对
-- 注3：当看到如下日志时，说明全量数据已经导入完成 
-    ```plaintext
-    Finish loading data, current #(record) is 59986052, and will generate update records in 3 seconds
-    ``` 
+该命令首先会构建一个自定义 MySQL 镜像，通过 TPC-H 工具自动产生约 7.4G 数据 (scale factor = 10)  
 
-    当看到如下日志时，说明增量数据已导入完成
-    ```plaintext
-    [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.30'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
-    ```
+镜像构建过程大约需要 1-2 分钟左右，构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker ps` 获取 container id 后，再通过 `docker logs -f ${container-id}` 来查看导入进度，此过程耗时约 15 分钟
+
+![load-data-log](../pictures/load-data-log.png)
+
+与此同时，您还可以通过 `docker exec -it ${container-id} bash` 进入容器内部，当前工作目录即为 `/tpch/dbgen`, 用 `wc -l lineitem.tbl.*` 查看产生的数据行数；与导入 MySQL 的数据进行比对
+
+![wc-l](../pictures/wc-l.png)
+
+**当看到如下日志时，说明全量数据已经导入完成，可以启动 FlinkCDC 任务进行全量同步了** 
+```plaintext
+Finish loading data, current #(record) is 59986052
+```
 
 ### 第二步：下载 Flink、FTS 及其他所需依赖
 Demo 运行使用 Flink 1.14.5 版本（ [flink-1.14.5 下载链接](https://flink.apache.org/downloads.html#apache-flink-1145) ），需要的其它依赖如下
-- Flink MySQL CDC Connector 
+- Flink MySQL CDC connector 
 - 基于 Flink 1.14 编译的 FTS
 - Hadoop Bundle Jar
 
@@ -142,7 +176,8 @@ Demo 运行使用 Flink 1.14.5 版本（ [flink-1.14.5 下载链接](https://fli
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
-- 获取最新 master 分支并使用 JKD8 及 `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` [编译](https://nightlies.apache.org/flink/flink-table-store-docs-master/docs/engines/build/) FTS release-0.3 版本
+- 获取最新 master 分支并使用 JKD8 编译 FTS release-0.3 版本  
+  `mvn clean install -Dmaven.test.skip=true -Pflink-1.14` 
 
 上述步骤完成后，lib 目录结构如图所示  
 ```
@@ -166,12 +201,11 @@ lib
 ```yaml
 jobmanager.memory.process.size: 4096m
 taskmanager.memory.process.size: 4096m
-taskmanager.numberOfTaskSlots: 10
+taskmanager.numberOfTaskSlots: 8
 parallelism.default: 2
 execution.checkpointing.interval: 1min
 state.backend: rocksdb
 state.backend.incremental: true
-jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
 ```
 
@@ -236,7 +270,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
 
 
 -- DWD table schema
--- 以 `l_shipdate` 为业务日期，创建以 `l_year` 分区的表，注意所有 partition key 都需要声明在 primary key 中
+-- 以 `l_shipdate` 为业务日期，创建以 `l_year` + `l_month` 的二级分区表，注意所有 partition key 都需要声明在 primary key 中
 CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_orderkey` INT NOT NULL,
   `l_partkey` INT NOT NULL,
@@ -255,8 +289,9 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_shipmode` CHAR(10) NOT NULL,
   `l_comment` VARCHAR(44) NOT NULL,
   `l_year` BIGINT NOT NULL,
-  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`) NOT ENFORCED
-) PARTITIONED BY (`l_year`) WITH (
+  `l_month` BIGINT NOT NULL,
+  PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`, `l_month`) NOT ENFORCED
+) PARTITIONED BY (`l_year`, `l_month`) WITH (
   -- 每个 partition 下设置 2 个 bucket
   'bucket' = '2',
   -- 设置 changelog-producer 为 'input'，这会使得上游 CDC Source 不丢弃 update_before，并且下游消费 dwd_lineitem 时没有 changelog-normalize 节点
@@ -265,7 +300,7 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
 
 -- ADS table schema
 -- 基于 TPC-H Q1，对已发货的订单，根据订单状态和收货状态统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标
-CREATE TABLE IF NOT EXISTS `ads_pricing_summary_report` (
+CREATE TABLE IF NOT EXISTS `ads_pricing_summary` (
   `l_returnflag` CHAR(1) NOT NULL,
   `l_linestatus` CHAR(1) NOT NULL,
   `sum_quantity` DOUBLE NOT NULL,
@@ -279,21 +314,16 @@ CREATE TABLE IF NOT EXISTS `ads_pricing_summary_report` (
 ) WITH (
   'bucket' = '2'
 );
-
--- 基于 TPC-H Q6，通过特定的销量和折扣过滤出一批商品，如果对其取消折扣，能在多大程度上降低成本，提升利润
-CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
-  `potential_revenue` DOUBLE NOT NULL
-) WITH (
-  'bucket' = '1'
-);
 ```
 然后运行 SQL CLI
 ```bash
 ./bin/sql-client.sh -i schema.sql
 ```
-![flink sql cli](./pictures/start-sql-cli.png)
+![flink sql cli](../pictures/start-sql-cli.png)
 
-### 第五步：提交作业
+### 第五步：提交同步任务
+
+在全量数据导入到 MySQL `lineitem` 表后，我们启动全量同步作业，这里以结果表作为作业名，方便标识
 
 - 任务1：通过 Flink MySQL CDC 同步 `ods_lineitem` 到 `dwd_lineitem`
   ```sql
@@ -317,15 +347,24 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
     `l_shipinstruct`,
     `l_shipmode`,
     `l_comment`,
-    YEAR(`l_shipdate`) AS `l_year`
+    YEAR(`l_shipdate`) AS `l_year`,
+    MONTH(`l_shipdate`) AS `l_month`
   FROM `ods_lineitem`;
   ```
+可以观察全量同步阶段的 RPS、生成 SNAPSHOT 等信息，也可以切换到 `/tmp/table-store-101/default.db/dwd_lineitem` 目录下，查看生成的 sst 和 manifest 文件
 
-- 任务2：写入结果表 `ads_pricing_summary_report`
+![file-structure](../pictures/file-structure.gif)
+
+### 第六步：计算聚合指标并查询结果 
+
+在全量同步完成后，我们启动聚合作业，实时写入 ads 表
+- 注：如有需要观察到历史全量数据的聚合中间结果，也可以不用等待全量同步完成
+- 任务2：写入结果表 `ads_pricing_summary`  
+
   ```sql
   -- 设置作业名
-  SET 'pipeline.name' = 'ads_pricing_summary_report';
-  INSERT INTO `ads_pricing_summary_report`
+  SET 'pipeline.name' = 'ads_pricing_summary';
+  INSERT INTO `ads_pricing_summary`
   SELECT 
     `l_returnflag`,
     `l_linestatus`,
@@ -338,69 +377,55 @@ CREATE TABLE IF NOT EXISTS `ads_potential_revenue_improvement_report` (
     AVG(`l_discount`) AS `avg_discount`,
     COUNT(*) AS `count_order`
   FROM `dwd_lineitem`
-  WHERE `l_year` <= 1998
+  WHERE (`l_year` < 1998 OR (`l_year` = 1998 AND `l_month`<= 9))
   AND `l_shipdate` <= DATE '1998-12-01' - INTERVAL '90' DAY
   GROUP BY  
     `l_returnflag`,
     `l_linestatus`;
   ```
-
--- 任务3：写入结果表 `ads_potential_revenue_improvement_report`
+我们切换到 batch 模式并且将结果展示切换为 `tableau` 模式  
 ```sql
-  SET 'pipeline.name' = 'ads_potential_revenue_improvement_report';
-  -- 设置作业并发
-  SET 'parallelism.default' = '1';
-  INSERT INTO `ads_potential_revenue_improvement_report`
-  SELECT 
-    SUM(`l_extendedprice` * `l_discount`) AS `revenue`
-  FROM `dwd_lineitem`
-  WHERE `l_year` = 1994
-  AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01 AND l_quantity < 24;
+SET 'execution.runtime-mode' = 'batch';
+
+SET 'sql-client.execution.result-mode' = 'tableau';
 ```
-### 第六步：执行 Ad-hoc query
-- 方式一: 批量查询  
-  切换到 batch 模式执行 static query, 可以多运行几次来查看结果变化（注：查询间隔应大于所查上游表的 checkpoint 间隔）
-  - 查询 Q1
-    1. 切换到 batch 模式  
-      `SET 'execution.runtime-mode' = 'batch';`
-    2. 将结果展示切换为 `tableau` 模式  
-      `SET 'sql-client.execution.result-mode' = 'tableau';`
-    3. 设置作业名
-      `SET 'pipeline.name' = 'Batch Query on Pricing Summary Report';`
-    4. 执行查询  
-      `SELECT * FROM ads_pricing_summary_report;`
-  - 查询 Q6
-    1. 切换到 batch 模式  
-      `SET 'execution.runtime-mode' = 'batch';`
-    2. 将结果展示切换为 `tableau` 模式  
-      `SET 'sql-client.execution.result-mode' = 'tableau';`
-    3. 设置作业并发为 1  
-      `SET 'parallelism.default' = '1';`
-    4. 设置作业名
-      `SET 'pipeline.name' = 'Batch Query on Potential Revenue Report';`
-    5. 执行查询  
-      `SELECT * FROM ads_potential_revenue_improvement_report;`
+然后查询刚才聚合的结果，可以多运行几次来观测指标的变化
+```sql
+SET 'pipeline.name' = 'Pricing Summary';
 
-- 方式二：流式查询  
-  在 streaming 模式下同时查询 Q1 和 Q6 需要两个 SQL CLI
-  在 `/flink` 目录下执行 `./bin/sql-client.sh -i schema.sql` 打开第二个 CLI
-- 在两个 CLI 下 分别执行
-  ```sql
-  SET 'sql-client.execution.result-mode' = 'table';
-  SET 'execution.runtime-mode' = 'streaming';
-  SET 'pipeline.name' = 'Streaming Query on Pricing Summary Report';
-  SET 'parallelism.default' = '2';
-  SELECT * FROM ads_pricing_summary_report;
-  ```
-  ```sql
-  SET 'sql-client.execution.result-mode' = 'table';
-  SET 'execution.runtime-mode' = 'streaming';
-  SET 'pipeline.name' = 'Streaming Query on Potential Revenue Report';
-  SET 'parallelism.default' = '1';
-  SELECT * FROM ads_potential_revenue_improvement_report;
-  ```
+SELECT * FROM ads_pricing_summary;
+```
 
-### 第七步：结束 Demo & 释放资源
+![ads-result](../pictures/ads-result.gif)
+
+- 注：查询间隔应大于所查上游表的 checkpoint 间隔
+
+### 第七步：观测更新数据
+在第一步全量数据导入到 MySQL 后，container 会开始倒数 1 小时，日志中会打印如下内容
+```
+Refresh Function will be applied after 1h
+```
+
+在一小时后，可以看到如下日志，紧接着 container 开始以固定间隔调用 TPC-H toolkit 产生的更新数据
+
+```
+Start to apply New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) in infinite loop
+TPC-H Population Generator (Version 3.0.0) starts to generate update set with sf = 10 and total pair = 100
+```
+
+RF1 代表新增订单，RF2 代表删除已有订单，这些更新会自动写入 MySQL `lineitem` 表中，每隔 10 组打印一次日志
+```
+Start to apply New Sales Refresh Function (RF1) for pair 10
+Start to apply Old Sales Refresh Function (RF2) for pair 10
+Start to apply New Sales Refresh Function (RF1) for pair 20
+Start to apply Old Sales Refresh Function (RF2) for pair 20
+...
+```
+此时，您可以观测到增量更新会持续写入到 `dwd_lineitem`
+
+![updates](../pictures/updates.gif)
+
+### 第八步：结束 Demo & 释放资源
 1. 执行 `exit;` 退出 Flink SQL CLI
 2. 在 `flink-1.14.5` 下执行 `./bin/stop-cluster.sh` 停止 Flink 集群
 3. 在 `table-store-101/real-time-update` 目录下执行 

@@ -28,8 +28,12 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # scale factor set to 10, this will generate ~59 Million records with ~7 GB
+        # scale factor set to 10, this will generate 59.9 Million records with 7.4 GB
         - sf=10
+        # how long to wait before starting to generate incremental data
+        - wait_for_update=1h
+        # the expected record size, which is determined by scale factor
+        - total_records=59986052
       network: host
     environment:
       - MYSQL_ROOT_PASSWORD=rootpw

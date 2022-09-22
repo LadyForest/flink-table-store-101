@@ -16,9 +16,7 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-
-
- mysql -uroot -p${MYSQL_ROOT_PASSWORD} -v -e "
+mysql --defaults-extra-file=/tpch/dbgen/mycreds.cnf -v -e "
     SET GLOBAL local_infile=true;
     DROP DATABASE IF EXISTS ${MYSQL_DATABASE};
     CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};
@@ -30,6 +28,8 @@
     GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'flink';
 
     FLUSH PRIVILEGES;
+
+    -- Create Base Table
 
     CREATE TABLE lineitem ( 
         l_orderkey    INTEGER NOT NULL,
@@ -52,6 +52,16 @@
     -- Add PK Constraint
 
     ALTER TABLE lineitem ADD PRIMARY KEY (l_orderkey, l_linenumber);
+
+    -- Create Delta Table
+
+    CREATE TABLE update_lineitem LIKE lineitem; 
     
-    -- Disable check
+    CREATE TABLE delete_lineitem (
+        l_orderkey    INTEGER NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+    ALTER TABLE delete_lineitem ADD PRIMARY KEY (l_orderkey);
+   
+    -- Disable Check
+
     SET UNIQUE_CHECKS = 0;"

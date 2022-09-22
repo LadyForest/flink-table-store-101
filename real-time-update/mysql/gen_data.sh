@@ -18,7 +18,7 @@
 ###############################################################################
 
 # generate lineitem only, and split into 16 chunks
-echo "TPC-H Population Generator (Version 3.0.0) starts to generate data with sf = 10 and chunk = 16"
+echo "$(date +"%Y-%m-%d %H:%M:%S") TPC-H Population Generator (Version 3.0.0) starts to generate data with sf = ${SF} and chunk = 16"
 for chunk in `seq 1 16`; do
   ./dbgen -q -s ${SF} -C 16 -S ${chunk} -T L &
 done
