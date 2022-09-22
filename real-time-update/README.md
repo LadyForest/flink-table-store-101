@@ -36,12 +36,12 @@ It utilizes the [TPC-H](https://www.tpc.org/tpch/) toolkit to generate a MySQL o
 ![dwd-job-1](../pictures/dwd_job_sync.gif)
 
 
-The diagram of this demo is listed as follows. The TPC-H toolkit and MySQL is running on a costomized docker container, and Flink release and FTS dependencies are downloaded and running on your host machine.
+The diagram of this demo is listed as follows. The TPC-H toolkit and MySQL is running on a customized docker container, and Flink release and FTS dependencies are downloaded and running on your host machine.
 ![diagram](../pictures/diagram.png) 
 
 
 ### About Data Genration  
-TPC-H as a classic Ad-hoc query benchmark，it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses to one single order line table `lineitem` to perform Q1 to illustrate how FTS supports real-time records updates at the sacle of ten millions.
+TPC-H as a classic Ad-hoc query benchmark, it reveals not only the performance of SUT (system under test), but also models all sorts of data requirements close to the business senario in the real-word. This demo chooses the order line table `lineitem` and  Q1 to illustrate how FTS supports real-time records updates at the sacle of ten millions.
 
 The schema of `lineitem` is listed as follow, and each row takes up to 128 bytes.
   <table>
@@ -157,7 +157,7 @@ Under `flink-table-store-101/real-time-update` directory, please run
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 59 million records. The build phase process takes abount to 1-2 minitues (it depends). After the build phase, the container is started with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the data. You can use `docker ps` to find the container id, and then use `docker logs ${container-id}` to track the loading progress, it takes about 15 minutes to finish the loading.
+This will invoke the Docker to first build a customized MySQL image which is initialized by TPC-H toolkit with 59 million records. The build phase  takes abount to 1-2 minitues (it depends). After the build phase, the MySQL container is initialized with `tpch_s10` as database name，and `lineitem` as table name，and use `LOAD DATA INFILE` to load the data. You can use `docker ps` to find the container id, and then use `docker logs -f ${container-id}` to track the loading progress. It takes about 15 minutes to finish the loading.
 ![load-data-log](../pictures/load-data-log.png)
 
 
@@ -245,7 +245,7 @@ USE CATALOG `table_store`;
 
 -- ODS table schema
 
--- Note that under the FTS catalog, when you create some other mirroring tables which need connectors, you need to explictly state them as temporary
+-- Note that under the FTS catalog, when you create some other mirroring tables with connectors, you need to explictly state them as temporary
 CREATE TEMPORARY TABLE `ods_lineitem` (
   `l_orderkey` INT NOT NULL,
   `l_partkey` INT NOT NULL,
@@ -266,8 +266,8 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
   PRIMARY KEY (`l_orderkey`, `l_linenumber`) NOT ENFORCED
 ) WITH (
   'connector' = 'mysql-cdc',
-  'hostname' = '127.0.0.1', -- or 'mysql.docker.internal' if you prefer a host，you can modify your host machine's `/etc/hosts` and add 127.0.0.1 mysql.docker.internal
-  'port' = '3307',
+  'hostname' = '127.0.0.1', -- or 'mysql.docker.internal' if you prefer a host，which requires to modify your host machine's `/etc/hosts` and add 127.0.0.1 mysql.docker.internal
+  'port' = '3307', -- your host port 3307 maps to container's port 3306
   'username' = 'flink',
   'password' = 'flink',
   'database-name' = 'tpch_s10',
@@ -276,7 +276,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
 
 
 -- DWD table schema
--- Let `l_shipdate` be the event time to create a partitioned table with `l_year` and `l_month` as partition keys, note that all partition keys are included primary keys as well
+-- Let `l_shipdate` be the event time to create a multi-partitioned table with `l_year` and `l_month` as partition keys, note that all partition keys should be included as primary keys as well
 CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_orderkey` INT NOT NULL,
   `l_partkey` INT NOT NULL,
@@ -298,10 +298,8 @@ CREATE TABLE IF NOT EXISTS `dwd_lineitem` (
   `l_month` BIGINT NOT NULL,
   PRIMARY KEY (`l_orderkey`, `l_linenumber`, `l_year`, `l_month`) NOT ENFORCED
 ) PARTITIONED BY (`l_year`, `l_month`) WITH (
-  -- 2 bucket under each partition
-  'bucket' = '2',
-  -- Set changelog-producer as 'input'，this will inform the CDC source not to drop update_before, and the downstream pipelines which consume dwd_lineitem as a source will not generate changelog-normalize operator
-  'changelog-producer' = 'input'
+  'bucket' = '2', -- 2 bucket under each partition
+  'changelog-producer' = 'input' -- Set changelog-producer as 'input'，this will inform the CDC source not to drop update_before, and the downstream pipelines which consume dwd_lineitem as a source will not generate changelog-normalize operator
 );
 
 -- ADS table schema
@@ -329,8 +327,11 @@ Then start SQL CLI
 
 ### Step5 - Submit FlinkCDC ETL Pipeline
 
-After loading all chunks to MySQL, we can start this job
-- Job1 - `ods_lineitem` to `dwd_lineitem` via Flink MySQL CDC
+Before starting this job, please make sure you see the container’s log
+```plaintext
+Finish loading data, current #(record) is 59986052
+```
+- Job1 - `ods_lineitem` to `dwd_lineitem`
   ```sql
   SET 'pipeline.name' = 'dwd_lineitem';
   INSERT INTO dwd_lineitem
@@ -355,19 +356,19 @@ After loading all chunks to MySQL, we can start this job
     MONTH(`l_shipdate`) AS `l_month`
   FROM `ods_lineitem`;
   ```
-  You can observe the RPS info from the Flink Web UI, and also can switch to `/tmp/table-store-101/default.db/dwd_lineitem` directory to see the table's storage structure, such as snapshot, manifest and sst file etc.
+  You can observe the RPS info from the Flink Web UI, and you might also want to cd `/tmp/table-store-101/default.db/dwd_lineitem` directory to see the table's storage structure, such as snapshot, manifest and sst file etc.
 
 ![file-structure](../pictures/file-structure.gif)
 
 ### Step6 - Compute Aggregation & Query Indicators
 After completing the full snapshot sync, you can start the ADS aggregation job and query indicators.
 
-- Note: you don't have to wait for the previous job to load all full snapshot, if you do require querying on the indicators in an intermediate phase.
+- Note: you don't have to wait for the previous job to load all full snapshot, if you do require indicators calculated on an incomplete historical base.
 
-- Job2 - Q1 `ads_pricing_summary_report`
+- Job2 - Q1 `ads_pricing_summary`
   ```sql
-  SET 'pipeline.name' = 'ads_pricing_summary_report';
-  INSERT INTO `ads_pricing_summary_report`
+  SET 'pipeline.name' = 'ads_pricing_summary';
+  INSERT INTO `ads_pricing_summary`
   SELECT 
     `l_returnflag`,
     `l_linestatus`,
@@ -409,7 +410,7 @@ When all chunks are loaded into MySQL in Step1, the container will start a count
 Refresh Function will be applied after 1h
 ```
 
-After that, the container will start an infinite loop to call TPC-H's New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2), which generates new orders and delete orders, as updates to the original `lineitem` table.
+After that, the container will start an infinite loop to call TPC-H's New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2), which generates new orders and delete orders, as real-time updates to the original `lineitem` table. You can see the log message like
 
 ```
 Start to apply New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) in infinite loop

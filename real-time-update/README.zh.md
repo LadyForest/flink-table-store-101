@@ -34,12 +34,13 @@
 
 ![dwd-job-1](../pictures/dwd_job_sync.gif)
 
-整体流程如下图所示
+整体流程如下图所示，其中 TPC-H 数据生成器和 MySQL 运行在 docker 容器内，本机只需要下载 Flink 包及 FTS 相关依赖即可。
 
 ![diagram](../pictures/diagram.png)   
 
 ### 关于数据生成  
-TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所包含的数据模型与真实的商业场景十分类似。本用例选取其中订单明细表 `lineitem` 和针对它的单表查询 Q1（下文会有详细说明）  
+
+TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其包含的数据模型与真实的商业场景十分类似。本用例选取其中订单明细表 `lineitem` 和针对它的单表查询 Q1（下文会有详细说明）  
 
 `lineitem` schema 如下表所示，每行记录在 128 bytes 左右
   <table>
@@ -141,7 +142,7 @@ TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所�
 ## 快速开始 
 
 ### 步骤简介
-本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 min，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
+本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 min，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动 Flink 作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
 
 ### 第一步：构建镜像，启动容器服务
 在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 736M 数据[^1]） 
@@ -150,9 +151,7 @@ TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所�
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
 ```
-该命令首先会构建一个自定义 MySQL 镜像，通过 TPC-H 工具自动产生约 7.4G 数据 (scale factor = 10)  
-
-镜像构建过程大约需要 1-2 min 左右，构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表并自动导入数据。可以通过 `docker ps` 获取 container id 后，再通过 `docker logs -f ${container-id}` 来查看导入进度，此过程耗时约 15 min
+该命令首先会构建一个自定义 MySQL 镜像，构建完成后容器启动，将会自动创建名为 `tpch_s10` 的数据库，在其中创建 `lineitem` 表，通过 TPC-H 工具自动产生约 7.4G 数据 (scale factor = 10)  ，并自动导入数据到 MySQL。可以通过 `docker ps` 获取 container id 后，再通过 `docker logs -f ${container-id}` 来查看导入进度，此过程耗时约 15 min
 
 ![load-data-log](../pictures/load-data-log.png)
 
@@ -171,7 +170,7 @@ Demo 运行使用 Flink 1.14.5 版本（ [flink-1.14.5 下载链接](https://fli
 - 基于 Flink 1.14 编译的 FTS
 - Hadoop Bundle Jar
 
-为方便操作，您可以直接在本项目的 `flink-table-store-101/flink/lib` 目录下载所有依赖，并放置于 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
+为方便操作，您可以直接在本项目的 `flink-table-store-101/flink/lib` 目录下载所有依赖，并放置于本地 `flink-1.14.5/lib` 目录下，也可以自行下载及编译
 
 - [flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3-SNAPSHOT/flink-sql-connector-mysql-cdc-2.3-SNAPSHOT.jar) 
 - [Hadoop Bundle Jar](https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar) 
@@ -208,7 +207,7 @@ state.backend.incremental: true
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
 ```
 
-- 注：若想观察 FTS 的异步合并、提交即流读等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，按需增加如下配置
+- 注：若想观察 FTS 的异步合并、Snapshot 提交及流读等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，按需增加如下配置
     ```
     # Log FTS
     logger.commit.name = org.apache.flink.table.store.file.operation.FileStoreCommitImpl
@@ -220,7 +219,7 @@ execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
     logger.enumerator.name = org.apache.flink.table.store.connector.source.ContinuousFileSplitEnumerator
     logger.enumerator.level = DEBUG
     ```
-    这里我们只开启提交记录的 DEBUG，然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
+    这里我们只开启提交的 DEBUG，然后在 `flink-1.14.5` 目录下执行 `./bin/start-cluster.sh`
 
 ### 第四步：初始化表 schema 并启动 Flink SQL CLI
 在 `flink-1.14.5` 目录下新建 `schema.sql` 文件，配置用例所需表的 schema 和 FTS Catalog 作为 init sql
@@ -324,41 +323,44 @@ CREATE TABLE IF NOT EXISTS `ads_pricing_summary` (
 
 在全量数据导入到 MySQL `lineitem` 表后，我们启动全量同步作业，这里以结果表作为作业名，方便标识
 
-- 任务1：通过 Flink MySQL CDC 同步 `ods_lineitem` 到 `dwd_lineitem`
-  ```sql
-  -- 设置作业名
-  SET 'pipeline.name' = 'dwd_lineitem';
-  INSERT INTO dwd_lineitem
-  SELECT
-    `l_orderkey`,
-    `l_partkey`,
-    `l_suppkey`,
-    `l_linenumber`,
-    `l_quantity`,
-    `l_extendedprice`,
-    `l_discount`,
-    `l_tax`,
-    `l_returnflag`,
-    `l_linestatus`,
-    `l_shipdate`,
-    `l_commitdate`,
-    `l_receiptdate`,
-    `l_shipinstruct`,
-    `l_shipmode`,
-    `l_comment`,
-    YEAR(`l_shipdate`) AS `l_year`,
-    MONTH(`l_shipdate`) AS `l_month`
-  FROM `ods_lineitem`;
-  ```
-  可以观察全量同步阶段的 RPS、生成 SNAPSHOT 等信息，也可以切换到 `/tmp/table-store-101/default.db/dwd_lineitem` 目录下，查看生成的 sst 和 manifest 文件
+任务1：通过 Flink MySQL CDC 同步 `ods_lineitem` 到 `dwd_lineitem`
+```sql
+-- 设置作业名
+SET 'pipeline.name' = 'dwd_lineitem';
+INSERT INTO dwd_lineitem
+SELECT
+  `l_orderkey`,
+  `l_partkey`,
+  `l_suppkey`,
+  `l_linenumber`,
+  `l_quantity`,
+  `l_extendedprice`,
+  `l_discount`,
+  `l_tax`,
+  `l_returnflag`,
+  `l_linestatus`,
+  `l_shipdate`,
+  `l_commitdate`,
+  `l_receiptdate`,
+  `l_shipinstruct`,
+  `l_shipmode`,
+  `l_comment`,
+  YEAR(`l_shipdate`) AS `l_year`,
+  MONTH(`l_shipdate`) AS `l_month`
+FROM `ods_lineitem`;
+```
+可以观察全量同步阶段的 RPS、生成 SNAPSHOT 等信息，也可以切换到 `/tmp/table-store-101/default.db/dwd_lineitem` 目录下，查看生成的 sst 和 manifest 文件
 
 ![file-structure](../pictures/file-structure.gif)
 
 ### 第六步：计算聚合指标并查询结果 
 
 在全量同步完成后，我们启动聚合作业，实时写入 ads 表
-- 注：如有需要观察到历史全量数据的聚合中间结果，也可以不用等待全量同步完成
-- 任务2：写入结果表 `ads_pricing_summary`  
+- 注：如有需要在历史全量数据不全的情况下也展示聚合结果，可以不用等待全量同步完成
+
+  
+
+任务2：写入结果表 `ads_pricing_summary`  
 
   ```sql
   -- 设置作业名
@@ -382,7 +384,7 @@ CREATE TABLE IF NOT EXISTS `ads_pricing_summary` (
     `l_returnflag`,
     `l_linestatus`;
   ```
-我们切换到 batch 模式并且将结果展示切换为 `tableau` 模式  
+  我们切换到 batch 模式并且将结果展示切换为 `tableau` 模式  
 ```sql
 SET 'execution.runtime-mode' = 'batch';
 
