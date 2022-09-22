@@ -9,7 +9,7 @@
     <thead>
         <tr>
             <th>Duration(min)</th>
-            <th>Rps In (million)</th>
+            <th>Records In (million)</th>
         </tr>
     </thead>
     <tbody>
@@ -138,14 +138,13 @@ TPC-H 作为一个经典的 Ad-hoc query 性能测试 benchmark，其自身所�
 
 对发货日期在一定范围内的订单，根据订单状态和收货状态统计订单数、商品数、总营业额、总利润、平均出厂价、平均折扣价、平均折扣含税价等指标。
 
-
 ## 快速开始 
 
 ### 步骤简介
 本用例会在第一步中将全量订单数据（约 59.9 million）导入 MySQL container，预计耗时 15 min，在此期间您可以准备好 Flink 及 FTS 等环境，等待数据导入完毕，然后启动作业。本案例中使用的 MySQL container 会在上述数据导入 MySQL 后自动倒计时 1 小时，然后开始持续触发 TPC-H 产生 RF1（新增订单）和 RF2（删除已有订单）来模拟增量更新（每组新增和删除之间间隔 10s）。以 100 组更新为例，将会产生 6 million 新增订单和 1.5 million 删除订单（注：TPC-H 产生的删除订单为主订单 ID，由于 `lineitem` 存在联合主键，故实际删除数据量稍大于 1.5 million）。此过程会一直持续，直至 container 停止。
 
 ### 第一步：构建镜像，启动容器服务
-在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 736M 数据） 
+在开始之前，请确保本机 Docker Disk Image 至少有 20G 空间，若空间不足，请将 docker-compose 文件中第 32 行 `sf` 改为 1（减少数据规模，此时生成约 736M 数据[^1]） 
 
 在 `flink-table-store-101/real-time-update` 目录下运行
 ```bash
@@ -406,7 +405,7 @@ SELECT * FROM ads_pricing_summary;
 Refresh Function will be applied after 1h
 ```
 
-在一小时后，可以看到如下日志，紧接着 container 开始以固定间隔调用 TPC-H toolkit 产生的更新数据
+在一小时后，可以看到如下日志，紧接着 container 开始以固定间隔调用 TPC-H toolkit 产生更新数据
 
 ```
 Start to apply New Sales Refresh Function (RF1) and Old Sales Refresh Function (RF2) in infinite loop
@@ -434,3 +433,7 @@ Start to apply Old Sales Refresh Function (RF2) for pair 20
     ```
     注意：请自行判断是否要增加 `-f` 来强制执行 `prune`
 4. 执行 `rm -rf /tmp/table-store-101`   
+
+## 附录  
+[^1]: TPC-H scale factor 与 `lineitem` cardinality 的关系如下图所示  
+![cardinality](../pictures/cardinality_lineitem.png)

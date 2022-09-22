@@ -10,7 +10,7 @@ It utilizes the [TPC-H](https://www.tpc.org/tpch/) toolkit to generate a MySQL o
     <thead>
         <tr>
             <th>Duration(min)</th>
-            <th>Rps In (million)</th>
+            <th>Records In (million)</th>
         </tr>
     </thead>
     <tbody>
@@ -137,10 +137,9 @@ The schema of `lineitem` is listed as follow, and each row takes up to 128 bytes
   </table>
 
 ### About Business Insights
-  
+
 **Pricing Summary Report Query (Q1)**  
 This query reports the amount of business that was billed, shipped, and returned. The Pricing Summary Report Query provides a summary pricing report for all lineitems shipped as of a given date. The date is within 60 - 120 days of the greatest ship date contained in the database. The query lists totals for extended price, discounted extended price, discounted extended price plus tax, average quantity, average extended price, and average discount. These aggregates are grouped by RETURNFLAG and LINESTATUS, and listed in ascending order of RETURNFLAG and LINESTATUS. A count of the number of lineitems in each group is included.
-
 
 ## Get Started 
 
@@ -153,7 +152,7 @@ This query reports the amount of business that was billed, shipped, and returned
 
 
 ### Step1 - Build Dokcer Image & Start Container
-Before start, please make sure your local machine has a least 20G free Docker Disk Image. If this condition cannot be met, please modify the docker-compose yaml at line 32 to change `sf` to 1.  
+Before start, please make sure your local machine has a least 20G free Docker Disk Image. If this condition cannot be met, please modify the docker-compose yaml at line 32 to set `sf=1` to reduce the data size[^1].  
 Under `flink-table-store-101/real-time-update` directory, please run
 ```bash
 docker-compose build --no-cache && docker-compose up -d --force-recreate
@@ -165,14 +164,14 @@ This will invoke the Docker to first build a customized MySQL image which is ini
 Meanwhile, you can also enter the internal container by `docker exec -it ${container-id} bash`, and the current working directory should be `/tpch/dbgen`, use `wc -l lineitem.tbl.*` to check the the record num and compare with `lineitem` table.
 ![wc-l](../pictures/wc-l.png)
 
+**The loading process completes when you see the following log, which indicates you can start the Flink CDC job now**
 
-**The loading process completes when you saw the following log, which means you can start the Flink CDC job now**
 ```plaintext
 Finish loading data, current #(record) is 59986052
-``` 
+```
 
 ### Step2 - Download Flink Release, FTS and Other Dependencies
-This demo use Flink 1.14.5 ([flink-1.14.5 download link](https://flink.apache.org/downloads.html#apache-flink-1145)). Besides, the rest dependecies needed are
+This demo uses  [Flink 1.14.5 release](https://flink.apache.org/downloads.html#apache-flink-1145), and the extra dependecies needed are
 - Flink MySQL CDC connector 
 - FTS compiled on master branch with Flink 1.14 profile
 - Hadoop Bundle Jar
@@ -356,7 +355,7 @@ After loading all chunks to MySQL, we can start this job
     MONTH(`l_shipdate`) AS `l_month`
   FROM `ods_lineitem`;
   ```
-You can observe the RPS info from the Flink Web UI, and also can switch to `/tmp/table-store-101/default.db/dwd_lineitem` directory to see the table's storage structure, such as snapshot, manifest and sst file etc.
+  You can observe the RPS info from the Flink Web UI, and also can switch to `/tmp/table-store-101/default.db/dwd_lineitem` directory to see the table's storage structure, such as snapshot, manifest and sst file etc.
 
 ![file-structure](../pictures/file-structure.gif)
 
@@ -436,3 +435,7 @@ And then, you can notice that the incremental snapshot are sync to `dwd_lineitem
     ```
     Note: add `-f` for `prune` at your own risk.
 4. Execute `rm -rf /tmp/table-store-101`    
+
+## Appendix  
+[^1]: Relationship between TPC-H scale factor and `lineitem` cardinality
+![cardinality](../pictures/cardinality_lineitem.png)
