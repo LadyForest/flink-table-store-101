@@ -25,12 +25,12 @@ while status=$(mysqladmin ping -uroot -p${MYSQL_ROOT_PASSWORD} -hlocalhost); [ "
   sleep 2m
 done
 
-while num_records=$(mysql --defaults-extra-file=/tpch/dbgen/mycreds.cnf -D ${MYSQL_DATABASE} -se "SELECT COUNT(1) FROM lineitem"); [ "${num_records}" -eq ${TOTAL_RECORDS} ]; do
+while num_records=$(mysql --defaults-extra-file=/tpch/dbgen/mycreds.cnf -D ${MYSQL_DATABASE} -se "SELECT COUNT(1) FROM lineitem"); [ "${num_records}" -ne ${TOTAL_RECORDS} ]; do
   echo "$(date +"%Y-%m-%d %H:%M:%S") Wait MySQL to finish loading data..."
   sleep 2m
 done
 
-echo "Refresh Function will be applied after ${WAIT_FOR_UPDATE}"
+echo "$(date +"%Y-%m-%d %H:%M:%S") Refresh Function will be applied after ${WAIT_FOR_UPDATE}"
 sleep ${WAIT_FOR_UPDATE}
 
 # generate continuous updates as long as the container is running, start with [1, 100], then [101, 200], [201, 300]...

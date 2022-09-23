@@ -401,6 +401,14 @@ SELECT * FROM ads_pricing_summary;
 
 - 注：查询间隔应大于所查上游表的 checkpoint 间隔
 
+除了查询聚合指标外，FTS 同时支持查询明细数据。假设我们发现 1998 年 12 月的发送退货的订单指标有问题，想通过订单明细进一步排查，可在 batch 模式下进行如下查询
+
+```sql
+SELECT * FROM `dwd_lineitem`
+WHERE `l_year` = 1998 AND `l_month` = 12
+AND `l_shipinstruct` = 'TAKE BACK RETURN'
+```
+
 ### 第七步：观测更新数据
 在第一步全量数据导入到 MySQL 后，container 会开始倒数 1 小时，日志中会打印如下内容
 ```
