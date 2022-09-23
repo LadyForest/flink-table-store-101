@@ -227,7 +227,7 @@ lib
 ├── flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
 ├── flink-shaded-zookeeper-3.4.14.jar
 ├── flink-sql-connector-mysql-cdc-2.2.1.jar
-├── flink-table-store-dist-0.2-SNAPSHOT.jar
+├── flink-table-store-dist-0.3-SNAPSHOT.jar
 ├── flink-table_2.11-1.14.5.jar
 ├── log4j-1.2-api-2.17.1.jar
 ├── log4j-api-2.17.1.jar

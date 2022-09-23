@@ -25,7 +25,7 @@ while status=$(mysqladmin ping -uroot -p${MYSQL_ROOT_PASSWORD} -hlocalhost); [ "
   sleep 2m
 done
 
-while num_records=$(mysql --defaults-extra-file=/tpch/dbgen/mycreds.cnf -D ${MYSQL_DATABASE} -se "SELECT COUNT(1) FROM lineitem"); [ "${num_records}" -ne ${TOTAL_RECORDS} ]; do
+while num_records=$(mysql --defaults-extra-file=/tpch/dbgen/mycreds.cnf -D ${MYSQL_DATABASE} -se "SELECT COUNT(1) FROM lineitem"); [ "${num_records}" != "${TOTAL_RECORDS}" ]; do
   echo "$(date +"%Y-%m-%d %H:%M:%S") Wait MySQL to finish loading data..."
   sleep 2m
 done
