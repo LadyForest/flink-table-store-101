@@ -1,5 +1,5 @@
 # 基于 Apache Flink Table Store 的维表连接
-*其它语言版本* [English](https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join)
+*其它语言版本* [English](https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join/README.md)
 
 ## 用例简介
 Flink Table Store（以下简称 **FTS**）表作为 Lookup 表用于维表关联、预聚合计算聚合指标、结果使用 Zeppelin 可视化的用例。
