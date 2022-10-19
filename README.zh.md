@@ -20,7 +20,7 @@
             <td rowspan=2>基于 <a href="https://www.tpc.org/tpch/">TPC-H 数据集</a>构建的实时 ETL 链路</td>
         </tr>
         <tr>
-          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join">基于 FTS 的维表连接及预聚合</a></code></b></td>
+          <td><b><code><a href="https://github.com/LadyForest/flink-table-store-101/tree/master/lookup-join/README.zh.md">基于 FTS 的维表连接及预聚合</a></code></b></td>
           <td>MySQL, Flink, Flink CDC, Zeppelin</td>
         </tr>
     </tbody>
