@@ -79,7 +79,7 @@ Schema of `nation`
       <tr>
         <td>n_nationkey</td>
         <td>INT NOT NULL</td>
-        <td>主订单 key，即主订单 id，主键</td>
+        <td>国家 id，主键</td>
       </tr>
       <tr>
         <td>n_name</td>
@@ -138,12 +138,12 @@ Schema of `customer`
       <tr>
         <td>c_acctbal</td>
         <td>CHAR(15) NOT NULL</td>
-        <td>订单优先级</td>
+        <td>买家账户余额</td>
       </tr>
       <tr>
         <td>c_mktsegment</td>
         <td>DECIMAL(15, 2) NOT NULL</td>
-        <td>账户余额</td>
+        <td>买家对应的市场区域</td>
       </tr>
       <tr>
         <td>c_comment</td>
@@ -485,7 +485,7 @@ CREATE TABLE ads_nation_purchase_power_indicator (
   FROM `dwd_enriched_orders`;
   ```
 
-### 第六步：执行 Ad-hoc query
+### 第六步：查询预聚合表并可视化结果
 这一步我们将使用 Zeppelin Notebook 查询聚合表并可视化结果
 
 首先，切换到本地 flink 所在目录，启动 zeppelin 容器
