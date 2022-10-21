@@ -3,7 +3,7 @@
 
 ## 用例简介
 Flink Table Store（以下简称 **FTS**）表作为 Lookup 表用于维表关联、预聚合计算聚合指标、结果使用 Zeppelin 可视化的用例。
-![visualize result](../pictures/visualize-result.png)
+![front conver](../pictures/front-cover.gif)
 
 #### 关于数据生成  
 [TPC-H](https://www.tpc.org/tpch/) 作为一个经典的 Ad-hoc query 性能测试 benchmark，其包含的数据模型与真实的商业场景十分类似。本用例选取其中三张表 `orders`， `customer` 和 `nation`，适当简化了 TPC-H Q5，展示 FTS 用于维表 join 的场景。
@@ -226,6 +226,8 @@ state.backend: rocksdb
 state.backend.incremental: true
 jobmanager.execution.failover-strategy: region
 execution.checkpointing.checkpoints-after-tasks-finish.enabled: true
+rest.port: 8081
+rest.address: 0.0.0.0
 ```
 
 若想观察 FTS 的异步合并、提交及流式消费等信息，可以在 `flink-1.14.5/conf` 目录下修改 log4j.properties 文件，增加如下配置
@@ -488,7 +490,7 @@ CREATE TABLE ads_nation_purchase_power_indicator (
 ### 第六步：查询预聚合表并可视化结果
 这一步我们将使用 Zeppelin Notebook 查询聚合表并可视化结果
 
-首先，切换到本地 flink 所在目录，启动 zeppelin 容器
+首先，切换到宿主机 `flink-1.14.5` 目录，mount 宿主机 flink 目录及 table store 目录到 Zeppelin 容器并启动
 ```bash
 docker run -p 8080:8080 \
   --rm \
@@ -498,23 +500,20 @@ docker run -p 8080:8080 \
   --name zeppelin apache/zeppelin:0.10.1
 ```
 
-然后打开 `localhost:8080` 就可以看到 Zeppelin 界面
+在容器启动后，打开浏览器输入 `localhost:8080` 就可以看到 Zeppelin 界面
 ![zepplin home](../pictures/zeppelin-home.png)
 
-点击右上角 anonymous 选择 Interpreter 来配置 Flink 解释器
+这里我们指定宿主机的 Flink 集群作为 Zeppelin Notebook 的解释器，需要将 Zeppelin Flink Interpreter 默认配置从 local 修改为 remote，点击右上角进入 Interpreter 配置项，找到 flink 一栏，修改并保存如下配置，Zeppelin 会自动更新解释器配置
 
-在 flink 一栏里，修改如下配置并点击保存，Zeppelin 会自动更新解释器配置
-
-注：在宿主机执行 `ifconfig | grep 'inet 192'| awk '{ print $2}'` 得到的 ip 替换掉 ${host-ip}
-```
-FLINK_HOME: /opt/flink
-flink.execution.mode: remote
-flink.execution.remote.host: ${host-ip} 
-flink.execution.remote.port: 8081
-zeppelin.flink.uiWebUrl: ${host-ip}:8081
+```yaml
+FLINK_HOME: /opt/flink # 使用 mounted flink 
+flink.execution.mode: remote # 使用 remote 模式
+flink.execution.remote.host: host.docker.internal #宿主机 gateway
+flink.execution.remote.port: 8081 # 宿主机 flink rest 端口号
+zeppelin.flink.uiWebUrl: host.docker.internal:8081
 ```
 
-![config zeppelin interpreter](../pictures/config-zepplin-interpreter.png)
+![zeppelin config](../pictures/zeppelin-config.gif)
 
 然后创建一个名为 `Annual Nation Purchase Power Indicator` 的 Notebook，解释器类型选 flink，在 Notebook 里注册并使用 `table_store` catalog
 
@@ -544,13 +543,13 @@ DESC ads_nation_purchase_power_indicator
 %flink.bsql
 SELECT * FROM ads_nation_purchase_power_indicator
 ```
-![zeppelin detail 2](../pictures/zeppelin-detail-2.png)
+![zeppelin visualize](../pictures/zeppelin-visualize.gif)
 
 
 ### 第八步：结束 Demo & 释放资源
 1. 执行 `exit;` 退出 Flink SQL CLI
 2. 在 `flink-1.14.5` 下执行 `./bin/stop-cluster.sh` 停止 Flink 集群
-3. 执行 `docker stop zeppelin && docker rm zeppelin` 停止并删除 Zeppelin 容器
+3. 执行 `docker stop zeppelin` 停止并删除 Zeppelin 容器
 4. 在 `table-store-101/lookup-join` 目录下执行 
     ```bash
     docker compose down && docker rmi lookup-join_mysql-101 && docker volume prune && docker builder prune

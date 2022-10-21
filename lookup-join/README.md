@@ -3,7 +3,7 @@
 
 ## Brief Introduction
 This is a handy demo to illustrate how Flink Table Store (*abbr.* **FTS**) supports look-up join and use pre-aggregate as merge engine. The aggregated result is visualized by Apache Zeppelin.
-![visualize result](../pictures/visualize-result.png)
+![front cover](../pictures/front-cover.gif)
 
 The TPC-H toolkit, MySQL and Zeppelin notebook are running on docker containers, and Flink release and FTS dependencies are downloaded and running on your host machine.
 
@@ -493,7 +493,7 @@ Then start SQL CLI
 We are now to use Apache Zeppelin Notebook to query and visualize our aggregated result.
 
 First of all, `cd ${your-machine}/flink-1.14.5` 
-since we need to mount the flink dist to Zeppelin container
+since we need to mount the flink dist and table store directories to Zeppelin container
 ```bash
 docker run -p 8080:8080 \
   --rm \
@@ -507,23 +507,17 @@ If everything goes well, you will see the homepage of Zeppelin Notebook by brows
 ![zepplin home](../pictures/zeppelin-home.png)
 
 Then we need to set up the existed Flink cluster (on your host machine) as the Zeppelin Notebook's Flink Interpreter (as remote mode).
-
-In order to do so, we need to get the host machine's IP address by executing
-```bash
-ifconfig | grep 'inet 192'| awk '{ print $2}'
-```
-
-And then modify the following configuration and substitue the placeholder `${host-ip}` by the previous IP.
+Click the `Interpreter` button and find `flink`, click `edit` button and modify the following configurations
 ```
 FLINK_HOME: /opt/flink
 flink.execution.mode: remote
-flink.execution.remote.host: ${host-ip} 
+flink.execution.remote.host: host.docker.internal 
 flink.execution.remote.port: 8081
-zeppelin.flink.uiWebUrl: ${host-ip}:8081
+zeppelin.flink.uiWebUrl: host.docker.internal:8081
 ```
 Last but not least, click the `Save` button, Zeppelin will automatically apply and restart.
 
-![config zeppelin interpreter](../pictures/config-zepplin-interpreter.png)
+![zeppelin config](../pictures/zeppelin-config.gif)
 
 
 Congratulations! We're almost done.
@@ -551,20 +545,20 @@ We can `SHOW TABLES` and `DESCRIBE ${table}` to check the table info.
 DESC ads_nation_purchase_power_indicator
 ```
 
-![create zeppelin notebook](../pictures/zeppelin-create-notebook.gif)
+![zeppelin create notebook](../pictures/zeppelin-create-notebook.gif)
 
 Then we can query and visualize the table `ads_nation_purchase_power_indicator`. Choose `Bar Chart` as result type, `o_year` as keys, `n_name` as groups and `o_sum_totalprice` as values.
 ```sql
 %flink.bsql
 SELECT * FROM ads_nation_purchase_power_indicator
 ```
-![zeppelin detail 2](../pictures/zeppelin-detail-2.png)
+![zeppelin visualize](../pictures/zeppelin-visualize.gif)
 
 
 ### Step8 - Finish Demo & Cleanup
 1. Execute `exit;`  to exit Flink SQL CLI
 2. Under `flink-1.14.5` directory, execute ./bin/stop-cluster.sh to stop Flink cluster
-3. 执行 `docker stop zeppelin && docker rm zeppelin` 停止并删除 Zeppelin 容器
+3. Excute `docker stop zeppelin` to stop and remove Zeppelin container
 4. Under `table-store-101/lookup-join` directory, execute
     ```bash
     docker compose down && docker rmi lookup-join_mysql-101 && docker volume prune && docker builder prune
