@@ -536,7 +536,7 @@ DESCRIBE 表信息
 DESC ads_nation_purchase_power_indicator
 ```
 
-![zeppelin detail 1](../pictures/zeppelin-detail-1.png)
+![zeppelin create notebook](../pictures/zeppelin-create-notebook.gif)
 
 
 查询并可视化结果，结果展示类型选择为柱状图，keys 选择 `o_year`，groups 选择 `n_name`，values 选择 `o_sum_totalprice`
