@@ -331,7 +331,6 @@ CREATE TABLE `dwd_orders` (
   PRIMARY KEY (`o_year`, `o_orderkey`) NOT ENFORCED
 ) PARTITIONED BY (`o_year`)
 WITH (
-  'changelog-producer' = 'input'
 ) LIKE `ods_orders` (EXCLUDING CONSTRAINTS EXCLUDING OPTIONS);
 
 CREATE TABLE `dwd_customer` LIKE `ods_customer` (EXCLUDING OPTIONS);
@@ -365,7 +364,6 @@ CREATE TABLE dwd_enriched_orders (
   `n_comment`        VARCHAR(152) NOT NULL,
   PRIMARY KEY (`o_year`, `o_orderkey`) NOT ENFORCED
 ) WITH (
-  'changelog-producer' = 'input',
   'sequence.field' = 'o_orderdate' -- use o_orderdate to generate sequence id, in order to avoid disorder
 );
 
@@ -376,7 +374,6 @@ CREATE TABLE ads_nation_purchase_power_indicator (
   `o_sum_totalprice`    DECIMAL(15,2) NOT NULL,
   PRIMARY KEY (`o_year`, `n_name`) NOT ENFORCED
 ) WITH (
-  'changelog-producer' = 'input',
   'merge-engine' = 'aggregation', -- o_totalprice will be aggregated as o_sum_totalprice
   'fields.o_sum_totalprice.aggregate-function' = 'sum'
 );
