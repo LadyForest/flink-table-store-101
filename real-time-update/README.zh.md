@@ -304,7 +304,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
   'port' = '3307',
   'username' = 'flink',
   'password' = 'flink',
-  'database-name' = 'tpch_s10',
+  'database-name' = 'tpch_s10', --如果docker-compose.yml 文件中第 32 行 `sf` 改为 1，则这里的数据库名为tpch_s1
   'table-name' = 'lineitem'
 );
 
@@ -480,7 +480,7 @@ Start to apply Old Sales Refresh Function (RF2) for pair 20
 2. 在 `flink-1.14.5` 下执行 `./bin/stop-cluster.sh` 停止 Flink 集群
 3. 在 `table-store-101/real-time-update` 目录下执行 
     ```bash
-    docker compose down && docker rmi real-time-update_mysql-101 && docker volume prune && docker builder prune
+    docker compose down && docker rmi real-time-update-mysql-101 && docker volume prune && docker builder prune
     ```
     注意：请自行判断是否要增加 `-f` 来强制执行 `prune`
 4. 执行 `rm -rf /tmp/table-store-101`   
