@@ -309,7 +309,7 @@ CREATE TEMPORARY TABLE `ods_lineitem` (
   'port' = '3307', -- your host port 3307 maps to container's port 3306
   'username' = 'flink',
   'password' = 'flink',
-  'database-name' = 'tpch_s10',
+  'database-name' = 'tpch_s10', -- If you modify the docker-compose.yml at line 32 to set `sf=1` the database name will be tpch_s1
   'table-name' = 'lineitem'
 );
 
@@ -480,7 +480,7 @@ And then, you can notice that the incremental snapshot are sync to `dwd_lineitem
 2. Under `flink-1.14.5` directory, execute `./bin/stop-cluster.sh` to stop Flink cluster
 3. Under `table-store-101/real-time-update` directory, execute 
     ```bash
-    docker compose down && docker rmi real-time-update_mysql-101 && docker volume prune && docker builder prune
+    docker compose down && docker rmi real-time-update-mysql-101 && docker volume prune && docker builder prune
     ```
     Note: add `-f` for `prune` at your own risk.
 4. Execute `rm -rf /tmp/table-store-101`    
